@@ -815,15 +815,15 @@ function ProfileOverview() {
             </Reveal>
             <Reveal className="about__meta" delay={0.14}>
               <div>
-                <span>BASED IN</span>
-                <strong>GUANGZHOU, CHINA</strong>
+                <span>所在地</span>
+                <strong>深圳 · 珠海</strong>
               </div>
               <a href="https://github.com/xuanyu6868" target="_blank" rel="noreferrer">
-                <span>GITHUB</span>
+                <span>GitHub</span>
                 <strong>github.com/xuanyu6868 ↗</strong>
               </a>
               <a href="mailto:2284664203@qq.com">
-                <span>EMAIL</span>
+                <span>邮箱</span>
                 <strong>2284664203@qq.com ↗</strong>
               </a>
             </Reveal>
@@ -904,13 +904,10 @@ function Agent2AgentFeature() {
           <Reveal className="a2a-diagram" delay={0.1}>
             <div className="a2a-diagram__row">
               <div className="a2a-diagram__node">
-                <div className="a2a-diagram__icon">
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
-                    <circle cx="12" cy="8" r="4" />
-                    <path d="M4 21c0-4 4-7 8-7s8 3 8 7" />
-                  </svg>
+                <div className="a2a-diagram__icon a2a-diagram__icon--image">
+                  <img src="/avatars/workbuddy-avatar.png" alt="我的 workbuddy" />
                 </div>
-                <strong>我</strong>
+                <strong>我的 workbuddy</strong>
                 <p>发起需求</p>
               </div>
 
@@ -921,8 +918,8 @@ function Agent2AgentFeature() {
               </div>
 
               <div className="a2a-diagram__node a2a-diagram__node--gateway">
-                <div className="a2a-diagram__ring" />
                 <div className="a2a-diagram__icon">
+                  <div className="a2a-diagram__ring" />
                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
                     <path d="M12 2L2 7l10 5 10-5-10-5z" />
                     <path d="M2 17l10 5 10-5" />
@@ -940,13 +937,8 @@ function Agent2AgentFeature() {
               </div>
 
               <div className="a2a-diagram__node">
-                <div className="a2a-diagram__icon">
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
-                    <rect x="3" y="8" width="18" height="12" rx="2" />
-                    <circle cx="8.5" cy="14" r="1.5" />
-                    <circle cx="15.5" cy="14" r="1.5" />
-                    <path d="M12 2v4M8 6h8" />
-                  </svg>
+                <div className="a2a-diagram__icon a2a-diagram__icon--image">
+                  <img src="/avatars/Claude%20Code-avatar.png" alt="Claude Code" />
                 </div>
                 <strong>对方 Agent</strong>
                 <p>WorkBuddy / Claude Code</p>
@@ -954,9 +946,7 @@ function Agent2AgentFeature() {
             </div>
 
             <div className="a2a-diagram__vertical">
-              <div className="a2a-diagram__vline">
-                <i aria-hidden="true">↕</i>
-              </div>
+              <div className="a2a-diagram__vline" />
               <div className="a2a-diagram__node a2a-diagram__node--device">
                 <div className="a2a-diagram__icon">
                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
@@ -1238,26 +1228,45 @@ function ProjectCard({ project, position }: { project: Project; position: number
       transition={{ duration: 1.1, ease: EASE }}
     >
       <div className="project__spotlight" aria-hidden="true" />
-      <div className="project__media">
-        <ProjectVisual type={project.visual} />
-        <div className="project__media-label"><span>{project.featured ? "FEATURED PROJECT" : "PROJECT VISUAL"}</span><span>PLACEHOLDER / {project.index}</span></div>
-      </div>
-      <div className="project__info">
-        <div className="project__meta"><span>{project.index} / 04</span><span>{project.year}</span></div>
-        <p className="project__type">{project.subtitle}</p>
-        <h3>{project.title}</h3>
-        <p className="project__description">{project.description}</p>
-        <div className="project__columns">
-          <div>
-            <span className="project__label">SYSTEM / OUTCOMES</span>
-            <ul>{project.highlights.map((item) => <li key={item}>{item}</li>)}</ul>
-          </div>
-          <div>
-            <span className="project__label">TECHNOLOGY</span>
-            <div className="stack-list">{project.stack.map((item) => <span key={item}>{item}</span>)}</div>
-          </div>
+      {project.id !== "weiclaw" && (
+        <div className="project__media">
+          <ProjectVisual type={project.visual} />
+          <div className="project__media-label"><span>{project.featured ? "FEATURED PROJECT" : "PROJECT VISUAL"}</span><span>PLACEHOLDER / {project.index}</span></div>
         </div>
-        <a className="project__link" href={project.url}>VIEW CASE <span aria-hidden="true">↗</span></a>
+      )}
+      <div className="project__info">
+        <div className={`project__meta${project.id === "weiclaw" ? " project__meta--weiclaw" : ""}`}>
+          {project.id === "weiclaw" ? (
+            <>
+              <span>{project.index}</span>
+              <span className="project__meta-line" />
+              <span>{project.year}</span>
+            </>
+          ) : (
+            <>
+              <span>{project.index} / 04</span>
+              <span>{project.year}</span>
+            </>
+          )}
+        </div>
+        {project.id !== "weiclaw" && (
+          <>
+            <p className="project__type">{project.subtitle}</p>
+            <h3>{project.title}</h3>
+            <p className="project__description">{project.description}</p>
+            <div className="project__columns">
+              <div>
+                <span className="project__label">SYSTEM / OUTCOMES</span>
+                <ul>{project.highlights.map((item) => <li key={item}>{item}</li>)}</ul>
+              </div>
+              <div>
+                <span className="project__label">TECHNOLOGY</span>
+                <div className="stack-list">{project.stack.map((item) => <span key={item}>{item}</span>)}</div>
+              </div>
+            </div>
+            <a className="project__link" href={project.url}>VIEW CASE <span aria-hidden="true">↗</span></a>
+          </>
+        )}
       </div>
     </motion.article>
   );

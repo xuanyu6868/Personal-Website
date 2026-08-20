@@ -19,10 +19,10 @@ export type Project = {
 export const projects: Project[] = [
   {
     id: "weiclaw",
-    index: "01",
+    index: "03",
     title: "WeiClaw",
     subtitle: "ENTERPRISE WECHAT AI HOSTING",
-    year: "2026 / DESKTOP RUNTIME",
+    year: "weiclaw",
     description:
       "A local AI hosting system that reads current-account messages, contacts, groups and tags through a client bridge, then executes real WeCom actions through an audited tool layer.",
     stack: [

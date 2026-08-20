@@ -18,6 +18,9 @@ yarn-debug.log*
 yarn-error.log*
 pnpm-debug.log*
 
+# Local tool state
+/.workbuddy/
+
 # Generated 1080p scroll-video assets are tracked in the repo
 /.vinext/
 
