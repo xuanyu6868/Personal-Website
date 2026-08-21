@@ -17,6 +17,41 @@ const SCENE_CONTACT_INDEX = String(4 + projects.length).padStart(2, "0");
 
 const INK_STAMP_COUNT = 32;
 
+const FRAME_COUNT = 815;
+const FRAME_WIDTH = 1920;
+const FRAME_HEIGHT = 1080;
+const OVERVIEW_COLUMNS = 30;
+const OVERVIEW_FRAME_WIDTH = 160;
+const OVERVIEW_FRAME_HEIGHT = 90;
+const HOT_FRAME_RADIUS = 60;
+const DECODE_WORKERS = 6;
+const BACKGROUND_PREFETCH_WORKERS = 3;
+const DRAW_INTERVAL = 1000 / (30000 / 1001);
+const PREFETCH_AFTER_MS = 1800;
+const DECODE_RETRY_DELAY_MS = 800;
+const DECODE_MAX_RETRIES = 2;
+const MIN_MEMORY_BUDGET_FRAMES = 48;
+
+/** Rough single-frame memory estimate: 1920x1080 RGBA, truncated to MB. */
+const FRAME_MEMORY_MB = Math.max(1, Math.round((FRAME_WIDTH * FRAME_HEIGHT * 4) / 1e6));
+const memoryBudgetMb = () => {
+  const nav = typeof navigator !== "undefined"
+    ? (navigator as Navigator & { deviceMemory?: number })
+    : undefined;
+  const deviceMemory =
+    nav && nav.deviceMemory !== undefined ? Math.max(1, nav.deviceMemory) : 8;
+  // 典型桌面(≥8GB)保持原设计的 120 帧上限;低内存设备按比例缩减,
+  // 避免 1920x1080 bitmap 缓存撑爆可用内存。
+  const budgetMb = Math.min(960, Math.max(192, deviceMemory * 120));
+  return Math.max(
+    MIN_MEMORY_BUDGET_FRAMES,
+    Math.min(120, Math.floor(budgetMb / FRAME_MEMORY_MB)),
+  );
+};
+
+type DecodedFrame = CanvasImageSource & { close?: () => void };
+type DecodeJob = { index: number; priority: number; retries: number };
+
 const portraitVertexShader = `
   attribute vec2 aPosition;
   varying vec2 vUv;
@@ -327,116 +362,372 @@ function InteractivePortrait() {
   );
 }
 
-function VideoScrollFrameSequence() {
-  const videoRef = useRef<HTMLVideoElement>(null);
+function ScrollFrameSequence() {
+  const canvasRef = useRef<HTMLCanvasElement>(null);
   const wrapperRef = useRef<HTMLDivElement>(null);
-  const progressRef = useRef(0);
+  const desiredFrameRef = useRef(0);
   const frameRef = useRef<number | null>(null);
   const [ready, setReady] = useState(false);
 
   useEffect(() => {
-    const video = videoRef.current;
+    const canvas = canvasRef.current;
     const wrapper = wrapperRef.current;
-    if (!video || !wrapper) return;
+    const context = canvas?.getContext("2d", { alpha: false });
+    if (!canvas || !context || !wrapper) return;
 
-    let lastAppliedTime = -1;
-    let canSeek = false;
-    const MIN_SEEK_DELTA = 1 / 30;
+    const hotFrames = new Map<number, DecodedFrame>();
+    const decodeQueue: DecodeJob[] = [];
+    const queuedFrames = new Set<number>();
+    const activeDecodes = new Map<number, AbortController>();
+    const prefetchController = new AbortController();
+    let overview: HTMLImageElement | null = null;
+    let paintedFrame = 0;
+    let lastScrollY = window.scrollY;
+    // 方向未知时(挂载初期、尚未产生有效滚动)为 null,预取采用对称窗口,
+    // 避免在首个真实滚动发生前就误 abort 掉首帧解码。
+    let direction: number | null = null;
+    let hasPaintedHighResolution = false;
+    let prefetchTimer: number | null = null;
+    let lastDrawAt = -Infinity;
+    let destroyed = false;
 
-    const update = () => {
+    const frameUrl = (index: number) =>
+      `/frames-1080/frame-${String(index + 1).padStart(4, "0")}.webp`;
+
+    const sizeCanvas = () => {
+      const pixelRatio = Math.min(window.devicePixelRatio || 1, 1.25);
+      const renderWidth = Math.round(window.innerWidth * pixelRatio);
+      const renderHeight = Math.round(window.innerHeight * pixelRatio);
+      if (canvas.width !== renderWidth || canvas.height !== renderHeight) {
+        canvas.width = renderWidth;
+        canvas.height = renderHeight;
+      }
+      return { renderWidth, renderHeight };
+    };
+
+    const drawSourceFrame = (
+      image: CanvasImageSource,
+      sourceX: number,
+      sourceY: number,
+      sourceWidth: number,
+      sourceHeight: number,
+    ) => {
+      const { renderWidth, renderHeight } = sizeCanvas();
+      const scale = Math.max(renderWidth / sourceWidth, renderHeight / sourceHeight);
+      const width = sourceWidth * scale;
+      const height = sourceHeight * scale;
+      context.imageSmoothingEnabled = true;
+      context.imageSmoothingQuality = "high";
+      context.drawImage(
+        image,
+        sourceX,
+        sourceY,
+        sourceWidth,
+        sourceHeight,
+        (renderWidth - width) / 2,
+        (renderHeight - height) / 2,
+        width,
+        height,
+      );
+    };
+
+    const drawOverviewFrame = (frameIndex: number) => {
+      if (!overview) return false;
+      const sourceX = (frameIndex % OVERVIEW_COLUMNS) * OVERVIEW_FRAME_WIDTH;
+      const sourceY = Math.floor(frameIndex / OVERVIEW_COLUMNS) * OVERVIEW_FRAME_HEIGHT;
+      drawSourceFrame(
+        overview,
+        sourceX,
+        sourceY,
+        OVERVIEW_FRAME_WIDTH,
+        OVERVIEW_FRAME_HEIGHT,
+      );
+      return true;
+    };
+
+    const drawFrame = (frameIndex: number, allowOverview = false) => {
+      const safeFrame = Math.min(FRAME_COUNT - 1, Math.max(0, frameIndex));
+      const source = hotFrames.get(safeFrame);
+
+      if (source) {
+        hotFrames.delete(safeFrame);
+        hotFrames.set(safeFrame, source);
+        drawSourceFrame(
+          source as CanvasImageSource,
+          0,
+          0,
+          FRAME_WIDTH,
+          FRAME_HEIGHT,
+        );
+        hasPaintedHighResolution = true;
+      } else if (!allowOverview || hasPaintedHighResolution || !drawOverviewFrame(safeFrame)) {
+        return false;
+      }
+
+      paintedFrame = safeFrame;
+      return true;
+    };
+
+    const trimHotFrames = () => {
+      while (hotFrames.size > hotFrameLimit) {
+        const oldest = hotFrames.keys().next().value as number | undefined;
+        if (oldest === undefined) break;
+        const source = hotFrames.get(oldest);
+        hotFrames.delete(oldest);
+        source?.close?.();
+      }
+    };
+
+    const decodeBlob = async (blob: Blob): Promise<DecodedFrame> => {
+      if (typeof createImageBitmap === "function") {
+        return (await createImageBitmap(blob)) as DecodedFrame;
+      }
+      return await new Promise<DecodedFrame>((resolve, reject) => {
+        const url = URL.createObjectURL(blob);
+        const image = new Image();
+        image.decoding = "async";
+        image.onload = () => {
+          URL.revokeObjectURL(url);
+          resolve(image as DecodedFrame);
+        };
+        image.onerror = () => {
+          URL.revokeObjectURL(url);
+          reject(new Error("Frame decode failed"));
+        };
+        image.src = url;
+      });
+    };
+
+    /** 预取时提前触发浏览器解码。*/
+    const warmImageCache = async (blob: Blob) => {
+      if (typeof createImageBitmap !== "function") return;
+      try {
+        const bitmap = (await createImageBitmap(blob)) as DecodedFrame;
+        bitmap.close?.();
+      } catch {
+        // 预取只为暖缓存;失败不影响正式加载。
+      }
+    };
+
+    const findNearestHotFrame = (target: number) => {
+      if (hotFrames.has(target)) return target;
+      let nearest: number | null = null;
+      let nearestDistance = Infinity;
+      for (const index of hotFrames.keys()) {
+        const distance = Math.abs(index - target);
+        if (
+          distance < nearestDistance ||
+          (distance === nearestDistance &&
+            nearest !== null &&
+            direction !== null &&
+            (direction > 0 ? index > nearest : index < nearest))
+        ) {
+          nearest = index;
+          nearestDistance = distance;
+        }
+      }
+      return nearest;
+    };
+
+    const scheduleDraw = () => {
+      if (frameRef.current === null) {
+        frameRef.current = window.requestAnimationFrame(renderFrame);
+      }
+    };
+
+    const hotFrameLimit = memoryBudgetMb();
+
+    const pumpDecodeQueue = () => {
+      decodeQueue.sort((a, b) => a.priority - b.priority);
+      while (activeDecodes.size < DECODE_WORKERS && decodeQueue.length > 0) {
+        const job = decodeQueue.shift();
+        if (!job) break;
+        queuedFrames.delete(job.index);
+        if (hotFrames.has(job.index) || activeDecodes.has(job.index)) continue;
+
+        const controller = new AbortController();
+        activeDecodes.set(job.index, controller);
+        void (async () => {
+          try {
+            const response = await fetch(frameUrl(job.index), {
+              cache: "force-cache",
+              signal: controller.signal,
+            });
+            if (!response.ok) throw new Error(`Frame ${job.index} failed`);
+            const frame = await decodeBlob(await response.blob());
+            if (destroyed || controller.signal.aborted) {
+              frame.close?.();
+              return;
+            }
+            hotFrames.set(job.index, frame);
+            trimHotFrames();
+            setReady(true);
+            scheduleDraw();
+          } catch {
+            if (destroyed || controller.signal.aborted) return;
+            // 网络波动或瞬时解码失败:有界重试,避免帧永久缺失。
+            if (job.retries < DECODE_MAX_RETRIES) {
+              window.setTimeout(() => {
+                if (destroyed) return;
+                if (
+                  hotFrames.has(job.index) ||
+                  activeDecodes.has(job.index)
+                ) {
+                  return;
+                }
+                queuedFrames.add(job.index);
+                decodeQueue.push({ ...job, retries: job.retries + 1 });
+                pumpDecodeQueue();
+              }, DECODE_RETRY_DELAY_MS * (job.retries + 1));
+              return;
+            }
+            // 重试耗尽:保留当前帧的兜底绘制,不再报错刷屏。
+          } finally {
+            if (activeDecodes.get(job.index) === controller) {
+              activeDecodes.delete(job.index);
+              pumpDecodeQueue();
+            }
+          }
+        })();
+      }
+    };
+
+    const queueFrame = (index: number, priority: number) => {
+      const safeIndex = Math.min(FRAME_COUNT - 1, Math.max(0, index));
+      if (hotFrames.has(safeIndex) || activeDecodes.has(safeIndex)) return;
+      if (queuedFrames.has(safeIndex)) {
+        const job = decodeQueue.find((item) => item.index === safeIndex);
+        if (job) job.priority = Math.min(job.priority, priority);
+      } else if (decodeQueue.length < hotFrameLimit) {
+        queuedFrames.add(safeIndex);
+        decodeQueue.push({ index: safeIndex, priority, retries: 0 });
+      }
+    };
+
+    const scheduleHotWindow = (center: number) => {
+      const keep = new Set<number>();
+      keep.add(center);
+      // 方向未知时按前向展开(center±d 全覆盖),保证对称预取。
+      const forwardSign = direction ?? 1;
+      for (let distance = 1; distance <= HOT_FRAME_RADIUS; distance += 1) {
+        const forward = center + forwardSign * distance;
+        const backward = center - forwardSign * distance;
+        if (forward >= 0 && forward < FRAME_COUNT) keep.add(forward);
+        if (backward >= 0 && backward < FRAME_COUNT) keep.add(backward);
+      }
+
+      for (let index = decodeQueue.length - 1; index >= 0; index -= 1) {
+        if (!keep.has(decodeQueue[index].index)) {
+          queuedFrames.delete(decodeQueue[index].index);
+          decodeQueue.splice(index, 1);
+        }
+      }
+      for (const [index, controller] of activeDecodes) {
+        if (!keep.has(index)) controller.abort();
+      }
+
+      queueFrame(center, 0);
+      for (let distance = 1; distance <= HOT_FRAME_RADIUS; distance += 1) {
+        queueFrame(center + forwardSign * distance, distance * 2 - 1);
+        queueFrame(center - forwardSign * distance, distance * 2);
+      }
+      pumpDecodeQueue();
+    };
+
+    const prefetchAllFrames = async () => {
+      let cursor = 0;
+      const worker = async () => {
+        while (cursor < FRAME_COUNT && !prefetchController.signal.aborted) {
+          const index = cursor++;
+          if (hotFrames.has(index)) continue;
+          try {
+            const response = await fetch(frameUrl(index), {
+              cache: "force-cache",
+              signal: prefetchController.signal,
+            });
+            if (response.ok) await warmImageCache(await response.blob());
+          } catch {
+            if (prefetchController.signal.aborted) return;
+          }
+        }
+      };
+
+      await Promise.all(
+        Array.from({ length: BACKGROUND_PREFETCH_WORKERS }, () => worker()),
+      );
+    };
+
+    function renderFrame(now: number) {
       frameRef.current = null;
+      if (now - lastDrawAt < DRAW_INTERVAL) {
+        scheduleDraw();
+        return;
+      }
+      lastDrawAt = now;
+      const target = desiredFrameRef.current;
+      const bestFrame = findNearestHotFrame(target);
+      if (bestFrame !== null) drawFrame(bestFrame);
+      else drawFrame(target, true);
+      if (!hotFrames.has(target)) {
+        queueFrame(target, 0);
+        pumpDecodeQueue();
+      }
+    }
+
+    const updateFrame = () => {
       const scrollRange = Math.max(
         1,
         document.documentElement.scrollHeight - window.innerHeight,
       );
       const progress = Math.min(1, Math.max(0, window.scrollY / scrollRange));
-      if (Math.abs(progress - progressRef.current) > 0.0004) {
-        wrapper.style.setProperty("--video-progress", `${progress * 100}%`);
+      desiredFrameRef.current = Math.round(progress * (FRAME_COUNT - 1));
+      // 只在真实滚动(位置变化)时更新方向,避免挂载阶段误判。
+      if (window.scrollY !== lastScrollY) {
+        direction = window.scrollY > lastScrollY ? 1 : -1;
+        lastScrollY = window.scrollY;
       }
-      progressRef.current = progress;
-
-      if (canSeek && video.duration && Number.isFinite(video.duration)) {
-        const targetTime = progress * video.duration;
-        if (!video.seeking && Math.abs(targetTime - lastAppliedTime) > MIN_SEEK_DELTA) {
-          lastAppliedTime = targetTime;
-          video.currentTime = targetTime;
-        }
-      }
+      wrapper.style.setProperty("--video-progress", `${progress * 100}%`);
+      scheduleHotWindow(desiredFrameRef.current);
+      scheduleDraw();
     };
 
-    const scheduleUpdate = () => {
-      if (frameRef.current === null) {
-        frameRef.current = window.requestAnimationFrame(update);
-      }
+    const onResize = () => {
+      drawFrame(paintedFrame);
+      updateFrame();
     };
 
-    const onScroll = () => scheduleUpdate();
-    const onResize = () => scheduleUpdate();
-    const onSeeked = () => scheduleUpdate();
-    const primeVideo = () => {
-      try {
-        const attempt = video.play();
-        if (attempt && typeof attempt.catch === "function") {
-          attempt.catch(() => {
-            // Autoplay may be blocked before the first user gesture. The
-            // normal loadeddata/canplay path still works once it loads.
-          });
-        }
-      } catch {
-        // Some older browsers throw synchronously; ignore.
-      }
-    };
-
-    const finishLoading = () => {
-      canSeek = true;
+    const overviewImage = new Image();
+    overviewImage.decoding = "async";
+    overviewImage.src = "/sequence/overview.webp";
+    overviewImage.onload = () => {
+      if (destroyed) return;
+      overview = overviewImage;
+      drawFrame(desiredFrameRef.current, true);
       setReady(true);
-      if (!video.paused) video.pause();
-      scheduleUpdate();
+      updateFrame();
     };
-    const onLoadedMetadata = () => {
-      setReady(true);
-      // Safari sometimes defers decoding the first frame until playback is
-      // attempted. A muted inline play/pause primes the decoder for seeking.
-      primeVideo();
-    };
-    const onLoadedData = () => finishLoading();
-    const onCanPlay = () => finishLoading();
 
-    video.preload = "auto";
-    video.muted = true;
-    video.playsInline = true;
-    video.setAttribute("playsinline", "");
-    video.setAttribute("muted", "");
-    video.pause();
-
-    video.addEventListener("loadedmetadata", onLoadedMetadata);
-    video.addEventListener("loadeddata", onLoadedData);
-    video.addEventListener("canplay", onCanPlay);
-    video.addEventListener("seeked", onSeeked);
-    window.addEventListener("scroll", onScroll, { passive: true });
+    scheduleHotWindow(desiredFrameRef.current);
+    prefetchTimer = window.setTimeout(() => {
+      void prefetchAllFrames();
+    }, PREFETCH_AFTER_MS);
+    updateFrame();
+    window.addEventListener("scroll", updateFrame, { passive: true });
     window.addEventListener("resize", onResize, { passive: true });
 
-    // The media may have already reached metadata/current data before React
-    // attached these listeners, especially on a cached reload. Sync state now
-    // so the video still becomes visible and scroll-seekable in that case.
-    if (video.readyState >= 1) {
-      setReady(true);
-    }
-    if (video.readyState >= 2) {
-      canSeek = true;
-      scheduleUpdate();
-    }
-
     return () => {
-      video.removeEventListener("loadedmetadata", onLoadedMetadata);
-      video.removeEventListener("loadeddata", onLoadedData);
-      video.removeEventListener("canplay", onCanPlay);
-      video.removeEventListener("seeked", onSeeked);
-      window.removeEventListener("scroll", onScroll);
+      window.removeEventListener("scroll", updateFrame);
       window.removeEventListener("resize", onResize);
-      if (frameRef.current !== null) {
-        window.cancelAnimationFrame(frameRef.current);
-      }
+      destroyed = true;
+      if (frameRef.current !== null) window.cancelAnimationFrame(frameRef.current);
+      if (prefetchTimer !== null) window.clearTimeout(prefetchTimer);
+      prefetchController.abort();
+      overview = null;
+      for (const controller of activeDecodes.values()) controller.abort();
+      for (const frame of hotFrames.values()) frame.close?.();
+      hotFrames.clear();
+      decodeQueue.length = 0;
+      queuedFrames.clear();
     };
   }, []);
 
@@ -446,13 +737,9 @@ function VideoScrollFrameSequence() {
       ref={wrapperRef}
       aria-hidden="true"
     >
-      <video
-        ref={videoRef}
+      <canvas
+        ref={canvasRef}
         className="scroll-video__media"
-        src="/video/hero-scrub.mp4"
-        muted
-        playsInline
-        preload="auto"
         tabIndex={-1}
       />
       <div className="scroll-video__wash" />
@@ -1546,7 +1833,7 @@ function SceneSnapController() {
 export default function Portfolio() {
   return (
     <div className="site">
-      <VideoScrollFrameSequence />
+      <ScrollFrameSequence />
       <AmbientBackground />
       <SceneSnapController />
       <SceneRail />
