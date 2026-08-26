@@ -1,4 +1,4 @@
-export type ProjectVisual = "commerce" | "interior" | "roi" | "bom" | "obsidian" | "weiclaw";
+export type ProjectVisual = "commerce" | "interior" | "roi" | "bom" | "weiclaw";
 
 export type Project = {
   id: string;
@@ -52,44 +52,6 @@ export const projects: Project[] = [
     url: "#contact",
     github: "https://github.com/xuanyu6868",
     visual: "weiclaw",
-  },
-  {
-    id: "wechat-obsidian",
-    index: "02",
-    title: "WeChat → Obsidian",
-    subtitle: "KNOWLEDGE CAPTURE PIPELINE",
-    year: "2026 / SELF-HOSTED",
-    description:
-      "A self-hosted knowledge capture system: users forward text, links, images and files to a WeCom assistant, and a server-backed archive pipeline plus an Obsidian plugin land them into the user's own Vault.",
-    stack: [
-      "WeCom",
-      "WeChat OA",
-      "Obsidian Plugin",
-      "TypeScript",
-      "Node.js",
-      "PostgreSQL",
-      "Archive Worker",
-      "WebSocket",
-      "Multi-tenant",
-      "SHA-256",
-      "ACK",
-      "Self-hosted",
-    ],
-    highlights: [
-      "WeChat OA onboarding → QR pairing → real Vault sync",
-      "Single enterprise cursor + multi-tenant routing",
-      "Official SDK decrypt + fingerprint identity mapping",
-      "Rule-first + AI-assisted content classification",
-      "User-isolated attachments with SHA-256 & ETag",
-      "Obsidian plugin pull → disk → ACK loop",
-      "WebSocket new-record notify (no content leak)",
-      "Device revocation + cross-tenant access protection",
-    ],
-    image: "/projects/wechat-obsidian.webp",
-    url: "#contact",
-    github: "https://github.com/xuanyu6868",
-    visual: "obsidian",
-    featured: true,
   },
   {
     id: "sparkcommerce",

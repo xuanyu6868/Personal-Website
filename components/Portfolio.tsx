@@ -9,11 +9,12 @@ import {
 } from "framer-motion";
 import { capabilities } from "../data/capabilities";
 import { projects, type Project, type ProjectVisual as VisualType } from "../data/projects";
+import NoteSyncGallery from "./NoteSyncGallery";
 
 const EASE = [0.22, 1, 0.36, 1] as const;
 
-const SCENE_CAPABILITIES_INDEX = String(3 + projects.length).padStart(2, "0");
-const SCENE_CONTACT_INDEX = String(4 + projects.length).padStart(2, "0");
+const SCENE_CAPABILITIES_INDEX = String(4 + projects.length).padStart(2, "0");
+const SCENE_CONTACT_INDEX = String(5 + projects.length).padStart(2, "0");
 
 const INK_STAMP_COUNT = 32;
 
@@ -23,34 +24,52 @@ const FRAME_HEIGHT = 1080;
 const OVERVIEW_COLUMNS = 30;
 const OVERVIEW_FRAME_WIDTH = 160;
 const OVERVIEW_FRAME_HEIGHT = 90;
-const HOT_FRAME_RADIUS = 60;
-const DECODE_WORKERS = 6;
-const BACKGROUND_PREFETCH_WORKERS = 3;
+const MAX_HOT_FRAMES = 20;
+const MAX_ACTIVE_DECODES = 3;
+const MAX_DECODE_QUEUE = MAX_HOT_FRAMES * 2;
+const SLOW_SCROLL_FRAME_VELOCITY = 12;
+const FAST_SCROLL_FRAME_VELOCITY = 40;
+const PREDICTED_FRAME_PRIORITY = 20;
+const FAST_WINDOW_SCHEDULE_INTERVAL_MS = 64;
 const DRAW_INTERVAL = 1000 / (30000 / 1001);
-const PREFETCH_AFTER_MS = 1800;
 const DECODE_RETRY_DELAY_MS = 800;
 const DECODE_MAX_RETRIES = 2;
-const MIN_MEMORY_BUDGET_FRAMES = 48;
 
-/** Rough single-frame memory estimate: 1920x1080 RGBA, truncated to MB. */
-const FRAME_MEMORY_MB = Math.max(1, Math.round((FRAME_WIDTH * FRAME_HEIGHT * 4) / 1e6));
-const memoryBudgetMb = () => {
+const getHotFrameLimit = () => {
   const nav = typeof navigator !== "undefined"
     ? (navigator as Navigator & { deviceMemory?: number })
     : undefined;
   const deviceMemory =
     nav && nav.deviceMemory !== undefined ? Math.max(1, nav.deviceMemory) : 8;
-  // 典型桌面(≥8GB)保持原设计的 120 帧上限;低内存设备按比例缩减,
-  // 避免 1920x1080 bitmap 缓存撑爆可用内存。
-  const budgetMb = Math.min(960, Math.max(192, deviceMemory * 120));
-  return Math.max(
-    MIN_MEMORY_BUDGET_FRAMES,
-    Math.min(120, Math.floor(budgetMb / FRAME_MEMORY_MB)),
-  );
+  return deviceMemory <= 4 ? 16 : MAX_HOT_FRAMES;
 };
 
 type DecodedFrame = CanvasImageSource & { close?: () => void };
-type DecodeJob = { index: number; priority: number; retries: number };
+type DecodeJob = {
+  index: number;
+  priority: number;
+  retries: number;
+  generation: number;
+};
+
+type FrameDebugMetrics = {
+  currentFrame: number;
+  desiredFrame: number;
+  renderedFrame: number;
+  hotFrames: number;
+  activeDecodes: number;
+  queuedDecodes: number;
+  overviewRetained: boolean;
+  scrollDirection: "up" | "down" | null;
+  scrollVelocity: number;
+  predictedFrame: number;
+};
+
+declare global {
+  interface Window {
+    __FRAME_DEBUG__?: FrameDebugMetrics;
+  }
+}
 
 const portraitVertexShader = `
   attribute vec2 aPosition;
@@ -141,6 +160,9 @@ function InteractivePortrait() {
     let program: WebGLProgram | null = null;
     let portraitTexture: WebGLTexture | null = null;
     let spiderTexture: WebGLTexture | null = null;
+    let positionBuffer: WebGLBuffer | null = null;
+    let vertexShader: WebGLShader | null = null;
+    let fragmentShader: WebGLShader | null = null;
     const brushDirection = { x: 1, y: 0 };
     const inkStamps = new Float32Array(INK_STAMP_COUNT * 4);
     const inkBirthTimes = new Float64Array(INK_STAMP_COUNT);
@@ -271,8 +293,8 @@ function InteractivePortrait() {
     void Promise.all([loadImage("/profile/xuanyu-portrait.png"), loadImage("/profile/xuanyu-spiderman-clean.png")])
       .then(([portraitImage, spiderImage]) => {
         if (destroyed) return;
-        const vertexShader = compileShader(gl.VERTEX_SHADER, portraitVertexShader);
-        const fragmentShader = compileShader(gl.FRAGMENT_SHADER, portraitFragmentShader);
+        vertexShader = compileShader(gl.VERTEX_SHADER, portraitVertexShader);
+        fragmentShader = compileShader(gl.FRAGMENT_SHADER, portraitFragmentShader);
         program = gl.createProgram();
         if (!program) throw new Error("Unable to create portrait program");
         gl.attachShader(program, vertexShader);
@@ -280,11 +302,13 @@ function InteractivePortrait() {
         gl.linkProgram(program);
         gl.deleteShader(vertexShader);
         gl.deleteShader(fragmentShader);
+        vertexShader = null;
+        fragmentShader = null;
         if (!gl.getProgramParameter(program, gl.LINK_STATUS)) {
           throw new Error(gl.getProgramInfoLog(program) ?? "Unable to link portrait program");
         }
 
-        const positionBuffer = gl.createBuffer();
+        positionBuffer = gl.createBuffer();
         if (!positionBuffer) throw new Error("Unable to create portrait geometry");
         gl.bindBuffer(gl.ARRAY_BUFFER, positionBuffer);
         gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 1, -1, -1, 1, -1, 1, 1, -1, 1, 1]), gl.STATIC_DRAW);
@@ -349,6 +373,9 @@ function InteractivePortrait() {
       canvas.removeEventListener("pointermove", onPointerMove);
       if (portraitTexture) gl.deleteTexture(portraitTexture);
       if (spiderTexture) gl.deleteTexture(spiderTexture);
+      if (positionBuffer) gl.deleteBuffer(positionBuffer);
+      if (vertexShader) gl.deleteShader(vertexShader);
+      if (fragmentShader) gl.deleteShader(fragmentShader);
       if (program) gl.deleteProgram(program);
     };
   }, []);
@@ -375,24 +402,55 @@ function ScrollFrameSequence() {
     const context = canvas?.getContext("2d", { alpha: false });
     if (!canvas || !context || !wrapper) return;
 
+    const hotFrameLimit = getHotFrameLimit();
     const hotFrames = new Map<number, DecodedFrame>();
     const decodeQueue: DecodeJob[] = [];
     const queuedFrames = new Set<number>();
     const activeDecodes = new Map<number, AbortController>();
-    const prefetchController = new AbortController();
+    const retryTimers = new Set<number>();
     let overview: HTMLImageElement | null = null;
+    let overviewImage: HTMLImageElement | null = null;
     let paintedFrame = 0;
     let lastScrollY = window.scrollY;
-    // 方向未知时(挂载初期、尚未产生有效滚动)为 null,预取采用对称窗口,
-    // 避免在首个真实滚动发生前就误 abort 掉首帧解码。
+    let lastScrollAt = performance.now();
+    let scrollVelocity = 0;
     let direction: number | null = null;
+    let predictedFrame = 0;
+    let desiredWindow = new Set<number>();
+    let scheduleGeneration = 0;
     let hasPaintedHighResolution = false;
-    let prefetchTimer: number | null = null;
     let lastDrawAt = -Infinity;
     let destroyed = false;
+    let pageVisible = !document.hidden;
+    const debugEnabled = process.env.NODE_ENV !== "production"
+      || window.location.hostname === "localhost"
+      || window.location.hostname === "127.0.0.1";
+
+    const publishDebugMetrics = () => {
+      if (!debugEnabled) return;
+      const metrics: FrameDebugMetrics = {
+        currentFrame: desiredFrameRef.current,
+        desiredFrame: desiredFrameRef.current,
+        renderedFrame: paintedFrame,
+        hotFrames: hotFrames.size,
+        activeDecodes: activeDecodes.size,
+        queuedDecodes: decodeQueue.length,
+        overviewRetained: overview !== null || overviewImage !== null,
+        scrollDirection: direction === null ? null : direction > 0 ? "down" : "up",
+        scrollVelocity,
+        predictedFrame,
+      };
+      window.__FRAME_DEBUG__ = metrics;
+      // The browser test harness reads the DOM realm; keep this marker
+      // development-only and invisible so it never becomes production UI.
+      canvas.dataset.frameDebug = JSON.stringify(metrics);
+    };
 
     const frameUrl = (index: number) =>
       `/frames-1080/frame-${String(index + 1).padStart(4, "0")}.webp`;
+
+    const clampFrame = (index: number) =>
+      Math.min(FRAME_COUNT - 1, Math.max(0, Math.round(index)));
 
     const sizeCanvas = () => {
       const pixelRatio = Math.min(window.devicePixelRatio || 1, 1.25);
@@ -445,8 +503,17 @@ function ScrollFrameSequence() {
       return true;
     };
 
+    const releaseOverview = () => {
+      if (overviewImage) {
+        overviewImage.onload = null;
+        overviewImage.onerror = null;
+      }
+      overviewImage = null;
+      overview = null;
+    };
+
     const drawFrame = (frameIndex: number, allowOverview = false) => {
-      const safeFrame = Math.min(FRAME_COUNT - 1, Math.max(0, frameIndex));
+      const safeFrame = clampFrame(frameIndex);
       const source = hotFrames.get(safeFrame);
 
       if (source) {
@@ -460,22 +527,50 @@ function ScrollFrameSequence() {
           FRAME_HEIGHT,
         );
         hasPaintedHighResolution = true;
-      } else if (!allowOverview || hasPaintedHighResolution || !drawOverviewFrame(safeFrame)) {
+      } else if (!allowOverview || !drawOverviewFrame(safeFrame)) {
         return false;
       }
 
       paintedFrame = safeFrame;
+      publishDebugMetrics();
       return true;
+    };
+
+    const evictionScore = (index: number) => {
+      const distance = Math.abs(index - desiredFrameRef.current);
+      const reverseDirection =
+        direction !== null &&
+        index !== desiredFrameRef.current &&
+        Math.sign(index - desiredFrameRef.current) === -direction;
+      const protectedWindow = desiredWindow.has(index);
+      const predicted = index === predictedFrame;
+      const painted = index === paintedFrame;
+      return (
+        distance * 2
+        + (reverseDirection ? 1000 : 0)
+        + (protectedWindow ? -500 : 500)
+        + (predicted ? -300 : 0)
+        + (painted ? -200 : 0)
+      );
     };
 
     const trimHotFrames = () => {
       while (hotFrames.size > hotFrameLimit) {
-        const oldest = hotFrames.keys().next().value as number | undefined;
-        if (oldest === undefined) break;
-        const source = hotFrames.get(oldest);
-        hotFrames.delete(oldest);
+        let victim: number | null = null;
+        let victimScore = -Infinity;
+        for (const index of hotFrames.keys()) {
+          const score = evictionScore(index);
+          if (victim === null || score > victimScore) {
+            victim = index;
+            victimScore = score;
+          }
+        }
+        if (victim === null) break;
+        const source = hotFrames.get(victim);
+        hotFrames.delete(victim);
         source?.close?.();
       }
+      publishDebugMetrics();
     };
 
     const decodeBlob = async (blob: Blob): Promise<DecodedFrame> => {
@@ -496,17 +591,6 @@ function ScrollFrameSequence() {
         };
         image.src = url;
       });
-    };
-
-    /** 预取时提前触发浏览器解码。*/
-    const warmImageCache = async (blob: Blob) => {
-      if (typeof createImageBitmap !== "function") return;
-      try {
-        const bitmap = (await createImageBitmap(blob)) as DecodedFrame;
-        bitmap.close?.();
-      } catch {
-        // 预取只为暖缓存;失败不影响正式加载。
-      }
     };
 
     const findNearestHotFrame = (target: number) => {
@@ -530,20 +614,55 @@ function ScrollFrameSequence() {
     };
 
     const scheduleDraw = () => {
-      if (frameRef.current === null) {
+      if (pageVisible && !destroyed && frameRef.current === null) {
         frameRef.current = window.requestAnimationFrame(renderFrame);
       }
     };
 
-    const hotFrameLimit = memoryBudgetMb();
+    const preloadWindow = () => {
+      if (direction === null || scrollVelocity < SLOW_SCROLL_FRAME_VELOCITY) {
+        return { ahead: 8, behind: 4, leadSeconds: 0.1 };
+      }
+      if (scrollVelocity < FAST_SCROLL_FRAME_VELOCITY) {
+        return { ahead: 12, behind: 4, leadSeconds: 0.18 };
+      }
+      return { ahead: 14, behind: 2, leadSeconds: 0.28 };
+    };
+
+    const queueFrame = (index: number, priority: number, retries = 0) => {
+      if (!pageVisible) return;
+      const safeIndex = clampFrame(index);
+      if (hotFrames.has(safeIndex) || activeDecodes.has(safeIndex)) return;
+      const existing = decodeQueue.find((item) => item.index === safeIndex);
+      if (existing) {
+        existing.priority = Math.min(existing.priority, priority);
+        existing.generation = scheduleGeneration;
+        existing.retries = Math.min(existing.retries, retries);
+        return;
+      }
+      if (queuedFrames.has(safeIndex) || decodeQueue.length >= MAX_DECODE_QUEUE) return;
+      queuedFrames.add(safeIndex);
+      decodeQueue.push({
+        index: safeIndex,
+        priority,
+        retries,
+        generation: scheduleGeneration,
+      });
+    };
 
     const pumpDecodeQueue = () => {
+      if (!pageVisible || destroyed) return;
       decodeQueue.sort((a, b) => a.priority - b.priority);
-      while (activeDecodes.size < DECODE_WORKERS && decodeQueue.length > 0) {
+      while (activeDecodes.size < MAX_ACTIVE_DECODES && decodeQueue.length > 0) {
         const job = decodeQueue.shift();
         if (!job) break;
         queuedFrames.delete(job.index);
-        if (hotFrames.has(job.index) || activeDecodes.has(job.index)) continue;
+        if (
+          job.generation !== scheduleGeneration
+          || !desiredWindow.has(job.index)
+          || hotFrames.has(job.index)
+          || activeDecodes.has(job.index)
+        ) continue;
 
         const controller = new AbortController();
         activeDecodes.set(job.index, controller);
@@ -555,30 +674,35 @@ function ScrollFrameSequence() {
             });
             if (!response.ok) throw new Error(`Frame ${job.index} failed`);
             const frame = await decodeBlob(await response.blob());
-            if (destroyed || controller.signal.aborted) {
+            const stale =
+              destroyed
+              || !pageVisible
+              || controller.signal.aborted
+              || (
+                job.generation !== scheduleGeneration
+                && !desiredWindow.has(job.index)
+                && job.index !== desiredFrameRef.current
+              );
+            if (stale) {
               frame.close?.();
               return;
             }
             hotFrames.set(job.index, frame);
             trimHotFrames();
             setReady(true);
+            publishDebugMetrics();
             scheduleDraw();
           } catch {
             if (destroyed || controller.signal.aborted) return;
             // 网络波动或瞬时解码失败:有界重试,避免帧永久缺失。
             if (job.retries < DECODE_MAX_RETRIES) {
-              window.setTimeout(() => {
-                if (destroyed) return;
-                if (
-                  hotFrames.has(job.index) ||
-                  activeDecodes.has(job.index)
-                ) {
-                  return;
-                }
-                queuedFrames.add(job.index);
-                decodeQueue.push({ ...job, retries: job.retries + 1 });
+              const retryTimer = window.setTimeout(() => {
+                retryTimers.delete(retryTimer);
+                if (destroyed || !pageVisible) return;
+                queueFrame(job.index, Math.max(0, job.priority - 1), job.retries + 1);
                 pumpDecodeQueue();
               }, DECODE_RETRY_DELAY_MS * (job.retries + 1));
+              retryTimers.add(retryTimer);
               return;
             }
             // 重试耗尽:保留当前帧的兜底绘制,不再报错刷屏。
@@ -592,73 +716,83 @@ function ScrollFrameSequence() {
       }
     };
 
-    const queueFrame = (index: number, priority: number) => {
-      const safeIndex = Math.min(FRAME_COUNT - 1, Math.max(0, index));
-      if (hotFrames.has(safeIndex) || activeDecodes.has(safeIndex)) return;
-      if (queuedFrames.has(safeIndex)) {
-        const job = decodeQueue.find((item) => item.index === safeIndex);
-        if (job) job.priority = Math.min(job.priority, priority);
-      } else if (decodeQueue.length < hotFrameLimit) {
-        queuedFrames.add(safeIndex);
-        decodeQueue.push({ index: safeIndex, priority, retries: 0 });
-      }
-    };
-
     const scheduleHotWindow = (center: number) => {
-      const keep = new Set<number>();
-      keep.add(center);
-      // 方向未知时按前向展开(center±d 全覆盖),保证对称预取。
+      if (!pageVisible || destroyed) return;
+      const safeCenter = clampFrame(center);
+      const { ahead, behind, leadSeconds } = preloadWindow();
       const forwardSign = direction ?? 1;
-      for (let distance = 1; distance <= HOT_FRAME_RADIUS; distance += 1) {
-        const forward = center + forwardSign * distance;
-        const backward = center - forwardSign * distance;
-        if (forward >= 0 && forward < FRAME_COUNT) keep.add(forward);
-        if (backward >= 0 && backward < FRAME_COUNT) keep.add(backward);
-      }
-
-      for (let index = decodeQueue.length - 1; index >= 0; index -= 1) {
-        if (!keep.has(decodeQueue[index].index)) {
-          queuedFrames.delete(decodeQueue[index].index);
-          decodeQueue.splice(index, 1);
-        }
-      }
-      for (const [index, controller] of activeDecodes) {
-        if (!keep.has(index)) controller.abort();
-      }
-
-      queueFrame(center, 0);
-      for (let distance = 1; distance <= HOT_FRAME_RADIUS; distance += 1) {
-        queueFrame(center + forwardSign * distance, distance * 2 - 1);
-        queueFrame(center - forwardSign * distance, distance * 2);
-      }
-      pumpDecodeQueue();
-    };
-
-    const prefetchAllFrames = async () => {
-      let cursor = 0;
-      const worker = async () => {
-        while (cursor < FRAME_COUNT && !prefetchController.signal.aborted) {
-          const index = cursor++;
-          if (hotFrames.has(index)) continue;
-          try {
-            const response = await fetch(frameUrl(index), {
-              cache: "force-cache",
-              signal: prefetchController.signal,
-            });
-            if (response.ok) await warmImageCache(await response.blob());
-          } catch {
-            if (prefetchController.signal.aborted) return;
-          }
+      predictedFrame = clampFrame(
+        safeCenter + forwardSign * scrollVelocity * leadSeconds,
+      );
+      const candidates = new Map<number, number>();
+      const addCandidate = (index: number, priority: number) => {
+        const safeIndex = clampFrame(index);
+        const previous = candidates.get(safeIndex);
+        if (previous === undefined || priority < previous) {
+          candidates.set(safeIndex, priority);
         }
       };
 
-      await Promise.all(
-        Array.from({ length: BACKGROUND_PREFETCH_WORKERS }, () => worker()),
-      );
+      addCandidate(safeCenter, 0);
+      addCandidate(predictedFrame, PREDICTED_FRAME_PRIORITY);
+      for (let distance = 1; distance <= ahead; distance += 1) {
+        addCandidate(safeCenter + forwardSign * distance, 10 + distance);
+      }
+      for (let distance = 1; distance <= behind; distance += 1) {
+        addCandidate(safeCenter - forwardSign * distance, 50 + distance);
+      }
+      const predictedSpread = Math.min(3, Math.max(0, ahead - 4));
+      for (let distance = 1; distance <= predictedSpread; distance += 1) {
+        addCandidate(
+          predictedFrame + forwardSign * distance,
+          PREDICTED_FRAME_PRIORITY + 4 + distance,
+        );
+      }
+
+      const orderedCandidates = [...candidates.entries()]
+        .sort(([, firstPriority], [, secondPriority]) => firstPriority - secondPriority)
+        .slice(0, hotFrameLimit);
+      desiredWindow = new Set(orderedCandidates.map(([index]) => index));
+      scheduleGeneration += 1;
+
+      for (let index = decodeQueue.length - 1; index >= 0; index -= 1) {
+        const job = decodeQueue[index];
+        const priority = candidates.get(job.index);
+        if (priority === undefined) {
+          queuedFrames.delete(decodeQueue[index].index);
+          decodeQueue.splice(index, 1);
+        } else {
+          job.priority = priority;
+          job.generation = scheduleGeneration;
+        }
+      }
+      for (const [index, controller] of activeDecodes) {
+        if (!desiredWindow.has(index)) controller.abort();
+      }
+
+      for (const [index, priority] of orderedCandidates) {
+        queueFrame(index, priority);
+      }
+      trimHotFrames();
+      publishDebugMetrics();
+      pumpDecodeQueue();
+    };
+
+    let lastHotWindowScheduleAt = -Infinity;
+    const scheduleHotWindowIfNeeded = (center: number, now: number) => {
+      if (
+        scrollVelocity >= FAST_SCROLL_FRAME_VELOCITY
+        && now - lastHotWindowScheduleAt < FAST_WINDOW_SCHEDULE_INTERVAL_MS
+      ) {
+        return;
+      }
+      lastHotWindowScheduleAt = now;
+      scheduleHotWindow(center);
     };
 
     function renderFrame(now: number) {
       frameRef.current = null;
+      if (!pageVisible || destroyed) return;
       if (now - lastDrawAt < DRAW_INTERVAL) {
         scheduleDraw();
         return;
@@ -666,8 +800,11 @@ function ScrollFrameSequence() {
       lastDrawAt = now;
       const target = desiredFrameRef.current;
       const bestFrame = findNearestHotFrame(target);
-      if (bestFrame !== null) drawFrame(bestFrame);
-      else drawFrame(target, true);
+      if (bestFrame !== null && (bestFrame === target || scrollVelocity < FAST_SCROLL_FRAME_VELOCITY)) {
+        drawFrame(bestFrame);
+      } else {
+        drawFrame(target, true);
+      }
       if (!hotFrames.has(target)) {
         queueFrame(target, 0);
         pumpDecodeQueue();
@@ -679,15 +816,24 @@ function ScrollFrameSequence() {
         1,
         document.documentElement.scrollHeight - window.innerHeight,
       );
+      const now = performance.now();
+      const elapsed = Math.max(16, now - lastScrollAt);
+      const scrollDelta = window.scrollY - lastScrollY;
+      const frameDelta = Math.abs((scrollDelta / scrollRange) * (FRAME_COUNT - 1));
+      const instantVelocity = (frameDelta * 1000) / elapsed;
+      scrollVelocity = scrollDelta === 0
+        ? scrollVelocity * 0.85
+        : scrollVelocity * 0.55 + instantVelocity * 0.45;
       const progress = Math.min(1, Math.max(0, window.scrollY / scrollRange));
       desiredFrameRef.current = Math.round(progress * (FRAME_COUNT - 1));
-      // 只在真实滚动(位置变化)时更新方向,避免挂载阶段误判。
-      if (window.scrollY !== lastScrollY) {
-        direction = window.scrollY > lastScrollY ? 1 : -1;
-        lastScrollY = window.scrollY;
+      if (scrollDelta !== 0) {
+        direction = scrollDelta > 0 ? 1 : -1;
       }
+      lastScrollY = window.scrollY;
+      lastScrollAt = now;
       wrapper.style.setProperty("--video-progress", `${progress * 100}%`);
-      scheduleHotWindow(desiredFrameRef.current);
+      publishDebugMetrics();
+      scheduleHotWindowIfNeeded(desiredFrameRef.current, now);
       scheduleDraw();
     };
 
@@ -696,9 +842,8 @@ function ScrollFrameSequence() {
       updateFrame();
     };
 
-    const overviewImage = new Image();
+    overviewImage = new Image();
     overviewImage.decoding = "async";
-    overviewImage.src = "/sequence/overview.webp";
     overviewImage.onload = () => {
       if (destroyed) return;
       overview = overviewImage;
@@ -706,28 +851,50 @@ function ScrollFrameSequence() {
       setReady(true);
       updateFrame();
     };
+    overviewImage.src = "/sequence/overview.webp";
+
+    const onVisibilityChange = () => {
+      pageVisible = !document.hidden;
+      if (!pageVisible) {
+        if (frameRef.current !== null) window.cancelAnimationFrame(frameRef.current);
+        frameRef.current = null;
+        for (const timer of retryTimers) window.clearTimeout(timer);
+        retryTimers.clear();
+        decodeQueue.length = 0;
+        queuedFrames.clear();
+        for (const controller of activeDecodes.values()) controller.abort();
+        publishDebugMetrics();
+        return;
+      }
+      scheduleHotWindow(desiredFrameRef.current);
+      scheduleDraw();
+    };
 
     scheduleHotWindow(desiredFrameRef.current);
-    prefetchTimer = window.setTimeout(() => {
-      void prefetchAllFrames();
-    }, PREFETCH_AFTER_MS);
     updateFrame();
     window.addEventListener("scroll", updateFrame, { passive: true });
     window.addEventListener("resize", onResize, { passive: true });
+    document.addEventListener("visibilitychange", onVisibilityChange);
 
     return () => {
       window.removeEventListener("scroll", updateFrame);
       window.removeEventListener("resize", onResize);
+      document.removeEventListener("visibilitychange", onVisibilityChange);
       destroyed = true;
       if (frameRef.current !== null) window.cancelAnimationFrame(frameRef.current);
-      if (prefetchTimer !== null) window.clearTimeout(prefetchTimer);
-      prefetchController.abort();
-      overview = null;
+      for (const timer of retryTimers) window.clearTimeout(timer);
+      retryTimers.clear();
+      releaseOverview();
       for (const controller of activeDecodes.values()) controller.abort();
+      activeDecodes.clear();
       for (const frame of hotFrames.values()) frame.close?.();
       hotFrames.clear();
       decodeQueue.length = 0;
       queuedFrames.clear();
+      if (debugEnabled) {
+        delete window.__FRAME_DEBUG__;
+        delete canvas.dataset.frameDebug;
+      }
     };
   }, []);
 
@@ -769,10 +936,12 @@ function buildNavSceneLinks(projectList: Project[]): Record<string, string> {
     [pad(2)]: "#work",
   };
   for (let index = 0; index < projectList.length; index += 1) {
-    links[pad(3 + index)] = `#project-${projectList[index].id}`;
+    const sceneIndex = 3 + index + (index > 0 ? 1 : 0);
+    links[pad(sceneIndex)] = `#project-${projectList[index].id}`;
+    if (index === 0) links[pad(4)] = "#project-wechat-obsidian";
   }
-  links[pad(3 + projectList.length)] = "#capabilities";
-  links[pad(4 + projectList.length)] = "#contact";
+  links[pad(4 + projectList.length)] = "#capabilities";
+  links[pad(5 + projectList.length)] = "#contact";
   return links;
 }
 
@@ -949,10 +1118,12 @@ function Reveal({
   children,
   className = "",
   delay = 0,
+  rootMargin = "0px 0px -10% 0px",
 }: {
   children: React.ReactNode;
   className?: string;
   delay?: number;
+  rootMargin?: string;
 }) {
   const ref = useRef<HTMLDivElement>(null);
   const [visible, setVisible] = useState(false);
@@ -967,11 +1138,11 @@ function Reveal({
         setVisible(true);
         observer.disconnect();
       },
-      { rootMargin: "0px 0px -10% 0px", threshold: 0.15 },
+      { rootMargin, threshold: 0.15 },
     );
     observer.observe(node);
     return () => observer.disconnect();
-  }, [reduceMotion]);
+  }, [reduceMotion, rootMargin]);
 
   return (
     <div
@@ -1070,9 +1241,9 @@ function Hero() {
 
 function ProfileOverview() {
   const timeline = [
-    ["2021 — 2025", "EDUCATION", "计算机科学本科 · 全栈方向"],
-    ["2025", "GRADUATION", "毕业 · 全职全栈工程师"],
-    ["2026", "FDE PROJECT", "AI 全栈 · 全自动工作流"],
+    ["2021", "计算机科学本科", "全栈方向"],
+    ["2025", "毕业 · 全职全栈工程师", "从开发走向完整产品交付"],
+    ["2026", "FDE / AI 全栈", "Agent · 自动化工作流"],
   ];
 
   return (
@@ -1120,10 +1291,10 @@ function ProfileOverview() {
 
       <Reveal className="language-note" delay={0.12}>
         <span>FULL-STACK FLOW</span>
-        <p>需求分析 <i>-&gt;</i> 产品实现 <i>-&gt;</i> 前后端开发 <i>-&gt;</i> AI接入 <i>-&gt;</i> 数据库设计 <i>-&gt;</i> 部署运维</p>
+        <p>需求分析 <i>→</i> 产品实现 <i>→</i> 前后端开发 <i>→</i> AI接入 <i>→</i> 数据库设计 <i>→</i> 部署运维</p>
       </Reveal>
 
-      <Reveal className="profile-timeline" delay={0.1}>
+      <Reveal className="profile-timeline" delay={0.1} rootMargin="0px 0px 12% 0px">
         {timeline.map(([year, tag, text]) => (
           <div className="profile-timeline__item" key={year}>
             <span className="profile-timeline__year">{year}</span>
@@ -1169,16 +1340,6 @@ function Agent2AgentFeature() {
               基于 A2A 协议的个人 Agent 通信网络，连接 WorkBuddy、<br />
               Claude Code 与多台设备。
             </p>
-          </Reveal>
-
-          <Reveal className="a2a-v2__features" delay={0.16}>
-            {features.map((feature) => (
-              <div className="a2a-v2__feature" key={feature.title}>
-                <strong>{feature.title}</strong>
-                <p>{feature.desc}</p>
-                <i aria-hidden="true">→</i>
-              </div>
-            ))}
           </Reveal>
 
           <Reveal className="a2a-v2__scroll" delay={0.2}>
@@ -1259,109 +1420,21 @@ function Agent2AgentFeature() {
             </div>
           </Reveal>
         </div>
+
+        <Reveal className="a2a-v2__features" delay={0.16}>
+          {features.map((feature) => (
+            <div className="a2a-v2__feature" key={feature.title}>
+              <strong>{feature.title}</strong>
+              <p>{feature.desc}</p>
+              <i aria-hidden="true">→</i>
+            </div>
+          ))}
+        </Reveal>
       </div>
     </SceneSection>
   );
 }
 
-
-function ObsidianVisual() {
-  const sourceRows = [
-    { type: "TEXT", tag: "idea", text: "关于本周产品评审的几点想法…", time: "10:41:58" },
-    { type: "LINK", tag: "article", text: "https://mp.weixin.qq.com/s/…", time: "10:42:02" },
-    { type: "IMG", tag: "attachment", text: "IMG_1042.png · 1.2 MB", time: "10:42:05" },
-    { type: "FILE", tag: "pdf", text: "Q3-budget-plan.pdf", time: "10:42:11" },
-  ];
-  const categories = [
-    { cls: "ob-category ob-category--work", label: "工作", count: "12", files: ["工作/2026-08.md"] },
-    { cls: "ob-category ob-category--learn", label: "学习", count: "7", files: ["学习/2026-08.md"] },
-    { cls: "ob-category ob-category--idea", label: "灵感", count: "5", files: ["灵感/2026-08.md", "灵感/待整理.md"] },
-  ];
-  const steps = [
-    { cls: "ob-pipe ob-pipe--recv", label: "收件", detail: "wecom → archive" },
-    { cls: "ob-pipe ob-pipe--decrypt", label: "解密", detail: "官方 SDK" },
-    { cls: "ob-pipe ob-pipe--route", label: "路由", detail: "external_userid → user_id" },
-    { cls: "ob-pipe ob-pipe--classify", label: "分类", detail: "规则 + AI" },
-    { cls: "ob-pipe ob-pipe--ack", label: "落盘", detail: "pull → disk → ACK" },
-  ];
-  const lastSync = [
-    ["10:42:12", "user_42 · 4 条新记录", "ACK ✓"],
-    ["10:42:03", "工作/2026-08.md 更新", "已写入"],
-    ["10:41:58", "WebSocket 通知已发送", "✓"],
-  ];
-  return (
-    <div className="ob-ui">
-      <div className="ob-topbar">
-        <span className="ob-topbar__logo">WX→OB</span>
-        <span>OBSIDIAN SYNC</span>
-        <span className="ob-topbar__live">ARCHIVE WORKER · LIVE</span>
-        <i />
-      </div>
-
-      <div className="ob-sidebar">
-        <div className="ob-pair">
-          <div className="ob-pair__qr"><i /><i /><i /><i /><i /><i /><i /><i /><i /></div>
-          <p><b>已绑定</b><span>user_id · U-1042</span></p>
-        </div>
-        <div className="ob-device">
-          <span>DEVICE</span>
-          <strong>MacBook · Obsidian 插件</strong>
-          <em>配对 / 拉取 / ACK 正常</em>
-        </div>
-        <div className="ob-metrics">
-          <span><b>1,284</b>归档记录</span>
-          <span><b>07</b>分类目录</span>
-          <span><b>50</b>用户上限</span>
-        </div>
-        <div className="ob-route">
-          <b>路由规则</b>
-          <span>external_userid → user_id</span>
-          <span>corp_id + next_seq 单游标</span>
-        </div>
-      </div>
-
-      <div className="ob-main">
-        <div className="ob-pipeline">
-          {steps.map((step, index) => (
-            <div className={step.cls} key={step.label}>
-              <span>{index + 1}</span><b>{step.label}</b><small>{step.detail}</small>
-              {index < steps.length - 1 && <i aria-hidden="true">→</i>}
-            </div>
-          ))}
-        </div>
-
-        <div className="ob-workspace">
-          <div className="ob-source">
-            <div className="ob-panel-head"><span>INBOX · WECOM</span><em>NEW 04</em></div>
-            {sourceRows.map((row) => (
-              <div className="ob-source__row" key={row.time + row.type}>
-                <span>{row.type}</span><b>{row.tag}</b><p>{row.text}</p><small>{row.time}</small>
-              </div>
-            ))}
-          </div>
-          <div className="ob-vault">
-            <div className="ob-panel-head"><span>VAULT · 微信收集/</span><em>SYNCED</em></div>
-            {categories.map((cat) => (
-              <div className={cat.cls} key={cat.label}>
-                <b>{cat.label}</b><span>{cat.count} 条</span>
-                {cat.files.map((file, fileIndex) => <small key={`${cat.label}-${fileIndex}`}>{file}</small>)}
-              </div>
-            ))}
-          </div>
-        </div>
-
-        <div className="ob-log">
-          <div className="ob-panel-head"><span>SYNC LOG</span><em>ACK · WS</em></div>
-          {lastSync.map(([time, action, state]) => (
-            <div className="ob-log__row" key={action}>
-              <span>{time}</span><b>{action}</b><em>{state}</em>
-            </div>
-          ))}
-        </div>
-      </div>
-    </div>
-  );
-}
 
 function CommerceVisual() {
   return (
@@ -1486,7 +1559,6 @@ function WeiClawVisual() {
 function ProjectVisual({ type }: { type: VisualType }) {
   return (
     <div className={`project-visual project-visual--${type}`} aria-label={`${type} product interface placeholder`}>
-      {type === "obsidian" && <ObsidianVisual />}
       {type === "commerce" && <CommerceVisual />}
       {type === "interior" && <InteriorVisual />}
       {type === "weiclaw" && <WeiClawVisual />}
@@ -1561,15 +1633,31 @@ function ProjectCard({ project, position }: { project: Project; position: number
 
 
 function ProjectScene({ project, position }: { project: Project; position: number }) {
+  const sceneLabel = project.title.toUpperCase();
+
   return (
     <SceneSection
       className="project-scene section page-shell"
       id={`project-${project.id}`}
-      index={String(position + 3).padStart(2, "0")}
-      label={project.title.toUpperCase()}
+      index={String(position === 0 ? 3 : position + 4).padStart(2, "0")}
+      label={sceneLabel}
       scene="work"
     >
       <ProjectCard project={project} position={position} />
+    </SceneSection>
+  );
+}
+
+function NoteSyncGalleryScene() {
+  return (
+    <SceneSection
+      className="project-scene note-sync-scene section page-shell"
+      id="project-wechat-obsidian"
+      index="04"
+      label="微信接入知识库"
+      scene="work"
+    >
+      <NoteSyncGallery />
     </SceneSection>
   );
 }
@@ -1664,22 +1752,31 @@ function SceneSnapController() {
     if (reduceMotion) return;
 
     const headerOffset = 0;
-    // Past this fraction of the gap to the next anchor, the user is clearly
-    // entering the next scene -> a gentle glide lands exactly on the anchor.
-    const ENTRY_ZONE = 0.42;
-    // A deliberate push: a mouse notch is ~100px, a flicked trackpad can send
-    // 150-300px in a burst. Only act when the user actually pushed.
-    const GESTURE_MIN = 170;
-    // Wheel events closer than this (ms) belong to the same gesture burst.
     const GESTURE_WINDOW = 280;
+    const GESTURE_SETTLE_DELAY = 280;
+    // Keep ordinary mouse-wheel notches on the browser's native scroll path.
+    // Trackpad gestures still enter the damped scene-snap path when their
+    // individual deltas are small enough to be classified as a light swipe.
+    const LIGHT_WHEEL_MAX = 48;
+    const LIGHT_CLASSIFICATION_DELAY = 90;
+    const DAMPING_DURATION = 780;
+    const LIGHT_GESTURE_COOLDOWN = 420;
+    const LIGHT_GESTURE_MAX = 0.34;
     const GLIDE_LIFETIME = 1500;
 
     let gestureDelta = 0;
+    let gestureStartScroll = 0;
     let lastWheelAt = 0;
+    let lightGestureLockUntil = 0;
+    let lightGestureTimer: number | null = null;
+    let lightGestureDirection = 0;
+    let nativeGestureActive = false;
     let gliding = false;
     let glideUntil = 0;
     let corrected = false;
     let glideTargetTop = 0;
+    let settleTimer: number | null = null;
+    let animationFrame: number | null = null;
     let cachedAnchors: { scene: HTMLElement; top: number }[] | null = null;
 
     const getSceneAnchors = () => {
@@ -1703,91 +1800,216 @@ function SceneSnapController() {
       return event.deltaY;
     };
 
+    const isDiscreteWheel = (event: WheelEvent, magnitude: number) =>
+      event.deltaMode !== 0
+      || (Number.isInteger(event.deltaY) && magnitude >= LIGHT_WHEEL_MAX);
+
+    const clampSceneIndex = (index: number, anchors: { top: number }[]) =>
+      Math.min(anchors.length - 1, Math.max(0, index));
+
+    const currentSceneIndex = (scrollTop: number, anchors: { top: number }[]) => {
+      const nextIndex = anchors.findIndex(({ top }) => top > scrollTop + 2);
+      return nextIndex === -1 ? anchors.length - 1 : Math.max(0, nextIndex - 1);
+    };
+
+    const nearestSceneIndex = (scrollTop: number, anchors: { top: number }[]) =>
+      anchors.reduce((nearestIndex, anchor, index) =>
+        Math.abs(anchor.top - scrollTop) < Math.abs(anchors[nearestIndex].top - scrollTop)
+          ? index
+          : nearestIndex, 0);
+
+    const cancelAnimation = () => {
+      if (animationFrame !== null) window.cancelAnimationFrame(animationFrame);
+      animationFrame = null;
+      gliding = false;
+    };
+
+    const animateTo = (targetTop: number) => {
+      cancelAnimation();
+      const startTop = window.scrollY;
+      const distance = targetTop - startTop;
+      if (Math.abs(distance) < 24) return;
+
+      const startedAt = performance.now();
+      lightGestureDirection = Math.sign(distance);
+      gliding = true;
+      lightGestureLockUntil = Date.now() + DAMPING_DURATION + LIGHT_GESTURE_COOLDOWN;
+      glideUntil = Date.now() + GLIDE_LIFETIME;
+      corrected = false;
+      glideTargetTop = targetTop;
+
+      const animateFrame = (now: number) => {
+        const progress = Math.min(1, (now - startedAt) / DAMPING_DURATION);
+        const easedProgress = progress < 0.5
+          ? 4 * Math.pow(progress, 3)
+          : 1 - Math.pow(-2 * progress + 2, 3) / 2;
+        window.scrollTo({ top: startTop + distance * easedProgress, behavior: "instant" });
+        if (progress < 1) {
+          animationFrame = window.requestAnimationFrame(animateFrame);
+          return;
+        }
+        animationFrame = null;
+        gliding = false;
+        window.scrollTo({ top: targetTop, behavior: "instant" });
+      };
+
+      animationFrame = window.requestAnimationFrame(animateFrame);
+    };
+
+    const clearLightGestureTimer = () => {
+      if (lightGestureTimer !== null) window.clearTimeout(lightGestureTimer);
+      lightGestureTimer = null;
+    };
+
+    const startLightGesture = (direction: number) => {
+      lightGestureTimer = null;
+      const anchors = getSceneAnchors();
+      if (anchors.length === 0) return;
+      const currentScroll = window.scrollY;
+      const currentIndex = currentSceneIndex(currentScroll, anchors);
+      const targetIndex = direction < 0 && currentScroll - anchors[currentIndex].top > 24
+        ? currentIndex
+        : clampSceneIndex(currentIndex + direction, anchors);
+      const target = anchors[targetIndex];
+      if (!target) return;
+
+      gestureDelta = 0;
+      nativeGestureActive = false;
+      animateTo(target.top);
+    };
+
+    const settleGesture = () => {
+      settleTimer = null;
+      if (gestureDelta === 0 || gliding) return;
+
+      const anchors = getSceneAnchors();
+      if (anchors.length === 0) {
+        gestureDelta = 0;
+        return;
+      }
+
+      const direction = gestureDelta > 0 ? 1 : -1;
+      const startIndex = currentSceneIndex(gestureStartScroll, anchors);
+      const movement = Math.abs(window.scrollY - gestureStartScroll);
+      const targetIndex = movement < window.innerHeight * LIGHT_GESTURE_MAX
+        ? clampSceneIndex(startIndex + direction, anchors)
+        : nearestSceneIndex(window.scrollY, anchors);
+      const target = anchors[targetIndex];
+      gestureDelta = 0;
+      if (!target) return;
+
+      const distance = Math.abs(target.top - window.scrollY);
+      if (distance < 24) return;
+
+      animateTo(target.top);
+    };
+
+    const scheduleSnap = () => {
+      if (settleTimer !== null) window.clearTimeout(settleTimer);
+      settleTimer = window.setTimeout(settleGesture, GESTURE_SETTLE_DELAY);
+    };
+
     const onWheel = (event: WheelEvent) => {
       const now = Date.now();
-      const magnitude = Math.abs(wheelPixels(event));
-      if (magnitude < 8) return;
-      event.stopPropagation();
+      const delta = wheelPixels(event);
+      const magnitude = Math.abs(delta);
+      if (magnitude < 1) return;
 
-      // A glide is running. Wheel events still inside the same gesture burst
-      // (trackpad momentum keeps firing for a few hundred ms) should let the
-      // glide finish; a fresh wheel after a pause is the user grabbing control.
+      // A mouse wheel emits discrete line/notch-sized deltas. Let those events
+      // stay fully native so a single notch is never delayed by scene snapping.
+      if (isDiscreteWheel(event, magnitude)) {
+        clearLightGestureTimer();
+        if (settleTimer !== null) window.clearTimeout(settleTimer);
+        settleTimer = null;
+        cancelAnimation();
+        lightGestureLockUntil = 0;
+        corrected = false;
+        gestureDelta = 0;
+        nativeGestureActive = true;
+        lastWheelAt = now;
+        return;
+      }
+
+      event.stopPropagation();
+      const wheelDirection = Math.sign(delta);
+
+      // A trackpad swipe can emit momentum events after the damping animation
+      // has already landed. Keep the whole burst as one scene transition.
+      if (now < lightGestureLockUntil) {
+        if (magnitude <= LIGHT_WHEEL_MAX && wheelDirection === lightGestureDirection) {
+          event.preventDefault();
+          return;
+        }
+
+        if (wheelDirection !== lightGestureDirection) {
+          clearLightGestureTimer();
+          lightGestureLockUntil = 0;
+          cancelAnimation();
+          corrected = false;
+          gestureDelta = 0;
+          nativeGestureActive = false;
+        } else {
+          // If the gesture grows beyond the light threshold, it is a deliberate
+          // large swipe rather than momentum. Hand it back to native scrolling.
+          cancelAnimation();
+          lightGestureLockUntil = 0;
+          corrected = false;
+          gestureDelta = 0;
+          gestureStartScroll = window.scrollY;
+          nativeGestureActive = true;
+        }
+      }
+
+      if (magnitude > LIGHT_WHEEL_MAX) clearLightGestureTimer();
+
+      // Momentum from the same light gesture should not interrupt the damping
+      // animation. A paused wheel starts a fresh gesture from its position.
       if (gliding && now < glideUntil) {
         if (now - lastWheelAt <= GESTURE_WINDOW) {
-          // Same burst as the one that started the glide: consume the event
-          // and keep gliding to the exact anchor.
           lastWheelAt = now;
           event.preventDefault();
           return;
         }
-        // New gesture: cancel the animation so the wheel applies from here.
-        gliding = false;
+        cancelAnimation();
         corrected = false;
-        window.scrollTo({ top: window.scrollY, behavior: "instant" });
         gestureDelta = 0;
+      }
+
+      if (nativeGestureActive && now - lastWheelAt > GESTURE_WINDOW) {
+        nativeGestureActive = false;
+      }
+
+      if (!nativeGestureActive && magnitude <= LIGHT_WHEEL_MAX) {
+        event.preventDefault();
         lastWheelAt = now;
+        gestureDelta = 0;
+        nativeGestureActive = false;
+        if (lightGestureTimer === null) {
+          const direction = delta > 0 ? 1 : -1;
+          lightGestureTimer = window.setTimeout(
+            () => startLightGesture(direction),
+            LIGHT_CLASSIFICATION_DELAY,
+          );
+        }
         return;
       }
-      gliding = false;
-      corrected = false;
 
-      if (now - lastWheelAt > GESTURE_WINDOW) gestureDelta = 0;
+      // Large gestures remain native so the user can cross multiple scenes.
+      if (!nativeGestureActive) {
+        gestureDelta = 0;
+        gestureStartScroll = window.scrollY;
+        nativeGestureActive = true;
+      }
       lastWheelAt = now;
-      gestureDelta += event.deltaY;
-
-      if (Math.abs(gestureDelta) < GESTURE_MIN) return;
-
-      const anchors = getSceneAnchors();
-      if (anchors.length === 0) return;
-
-      const currentScroll = window.scrollY;
-      const direction = gestureDelta > 0 ? 1 : -1;
-      const nextIndex = anchors.findIndex(({ top }) => top > currentScroll + 2);
-      const currentIndex = nextIndex === -1 ? anchors.length - 1 : Math.max(0, nextIndex - 1);
-      const current = anchors[currentIndex];
-
-      let target: { top: number } | null = null;
-      if (direction > 0 && anchors[currentIndex + 1]) {
-        // Scrolling down: current scene is the one above the position, next is
-        // the destination. Assist once the user has clearly entered its zone.
-        const next = anchors[currentIndex + 1];
-        const gap = next.top - current.top;
-        const entered = (currentScroll - current.top) / gap;
-        if (entered > ENTRY_ZONE && entered < 1 - 0.08) target = next;
-      } else if (direction < 0 && nextIndex !== -1 && nextIndex > 0) {
-        // Scrolling up: the scene being left is the first anchor below the
-        // position; the destination is the anchor just above it.
-        const leaving = anchors[nextIndex];
-        const prev = anchors[nextIndex - 1];
-        const gap = leaving.top - prev.top;
-        const backFromPrev = (currentScroll - prev.top) / gap;
-        if (backFromPrev < 1 - ENTRY_ZONE && backFromPrev > 0.08) target = prev;
-      }
-
-      if (!target) {
-        gestureDelta = 0;
-        return;
-      }
-
-      const distance = Math.abs(target.top - currentScroll);
-      if (distance < 24 || distance > window.innerHeight * 0.98) {
-        gestureDelta = 0;
-        return;
-      }
-
-      event.preventDefault();
-      gestureDelta = 0;
-      gliding = true;
-      glideUntil = now + GLIDE_LIFETIME;
-      corrected = false;
-      glideTargetTop = target.top;
-      window.scrollTo({ top: target.top, behavior: "smooth" });
+      gestureDelta += delta;
+      scheduleSnap();
     };
 
     // Quiet landing aid: while a glide is finishing, if the browser's smooth
     // scroll rests a hair off the anchor, nudge it once. Never fires while the
     // user is scrolling on their own.
     const onScroll = () => {
+      if (animationFrame !== null) return;
       if (!gliding || Date.now() > glideUntil || corrected) return;
       const distance = Math.abs(glideTargetTop - window.scrollY);
       if (distance > 160 || distance < 10) return;
@@ -1798,6 +2020,10 @@ function SceneSnapController() {
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key !== "PageDown" && event.key !== "PageUp") return;
       if (gliding) return;
+      clearLightGestureTimer();
+      if (settleTimer !== null) window.clearTimeout(settleTimer);
+      settleTimer = null;
+      gestureDelta = 0;
       const anchors = getSceneAnchors();
       if (anchors.length === 0) return;
       const currentScroll = window.scrollY;
@@ -1808,11 +2034,7 @@ function SceneSnapController() {
         : anchors[Math.max(currentIndex - 1, 0)];
       if (!target) return;
       event.preventDefault();
-      gliding = true;
-      glideUntil = Date.now() + GLIDE_LIFETIME;
-      corrected = false;
-      glideTargetTop = target.top;
-      window.scrollTo({ top: target.top, behavior: "smooth" });
+      animateTo(target.top);
     };
 
     window.addEventListener("wheel", onWheel, { passive: false, capture: true });
@@ -1820,10 +2042,13 @@ function SceneSnapController() {
     window.addEventListener("keydown", onKeyDown);
     window.addEventListener("resize", invalidateAnchors);
     return () => {
-      window.removeEventListener("wheel", onWheel);
+      window.removeEventListener("wheel", onWheel, { capture: true });
       window.removeEventListener("scroll", onScroll);
       window.removeEventListener("keydown", onKeyDown);
       window.removeEventListener("resize", invalidateAnchors);
+      if (settleTimer !== null) window.clearTimeout(settleTimer);
+      clearLightGestureTimer();
+      cancelAnimation();
     };
   }, [reduceMotion]);
 
@@ -1842,8 +2067,10 @@ export default function Portfolio() {
         <Hero />
         <ProfileOverview />
         <Agent2AgentFeature />
-        {projects.map((project, index) => (
-          <ProjectScene project={project} position={index} key={project.id} />
+        {projects[0] && <ProjectScene project={projects[0]} position={0} />}
+        <NoteSyncGalleryScene />
+        {projects.slice(1).map((project, index) => (
+          <ProjectScene project={project} position={index + 1} key={project.id} />
         ))}
         <Capabilities />
         <Contact />
