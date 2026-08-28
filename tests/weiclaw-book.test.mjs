@@ -99,6 +99,15 @@ test("keeps semantic page content and reports completed spreads", () => {
   assert.match(componentSource, /Open \$\{page\.title/);
 });
 
+test("layers the paper canvas inside the shell without rigid flip CSS", () => {
+  assert.match(stylesheet, /\.weiclaw-book__paper-canvas\s*\{[^}]*position:absolute/);
+  assert.match(stylesheet, /\.weiclaw-book__paper-canvas\s*\{[^}]*pointer-events:none/);
+  assert.match(stylesheet, /\.weiclaw-book\.is-mesh-ready \.weiclaw-book__spread/);
+  assert.match(stylesheet, /\.weiclaw-book__semantic-pages/);
+  assert.doesNotMatch(stylesheet, /\.weiclaw-book__turning-sheet/);
+  assert.doesNotMatch(stylesheet, /\.weiclaw-book__under-page/);
+});
+
 test("does not install a wheel handler for the book and honors reduced motion", () => {
   assert.doesNotMatch(componentSource, /addEventListener\(["']wheel/);
   assert.match(componentSource, /useReducedMotion/);
