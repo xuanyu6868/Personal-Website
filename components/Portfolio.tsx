@@ -10,6 +10,7 @@ import {
 import { capabilities } from "../data/capabilities";
 import { projects, type Project, type ProjectVisual as VisualType } from "../data/projects";
 import NoteSyncGallery from "./NoteSyncGallery";
+import WeiClawBook from "./WeiClawBook";
 
 const EASE = [0.22, 1, 0.36, 1] as const;
 
@@ -1579,7 +1580,7 @@ function ProjectCard({ project, position }: { project: Project; position: number
 
   return (
     <motion.article
-      className={`project ${project.featured ? "project--featured" : ""} ${position % 2 === 0 ? "project--reverse" : ""}`}
+      className={`project ${project.featured ? "project--featured" : ""} ${project.id === "weiclaw" ? "project--weiclaw" : ""} ${position % 2 === 0 ? "project--reverse" : ""}`}
       onPointerMove={setSpotlight}
       initial={reduceMotion ? false : { opacity: 0, y: 56 }}
       whileInView={reduceMotion ? undefined : { opacity: 1, y: 0 }}
@@ -1587,7 +1588,9 @@ function ProjectCard({ project, position }: { project: Project; position: number
       transition={{ duration: 1.1, ease: EASE }}
     >
       <div className="project__spotlight" aria-hidden="true" />
-      {project.id !== "weiclaw" && (
+      {project.id === "weiclaw" ? (
+        <WeiClawBook />
+      ) : (
         <div className="project__media">
           <ProjectVisual type={project.visual} />
           <div className="project__media-label"><span>{project.featured ? "FEATURED PROJECT" : "PROJECT VISUAL"}</span><span>PLACEHOLDER / {project.index}</span></div>
@@ -1595,13 +1598,7 @@ function ProjectCard({ project, position }: { project: Project; position: number
       )}
       <div className="project__info">
         <div className={`project__meta${project.id === "weiclaw" ? " project__meta--weiclaw" : ""}`}>
-          {project.id === "weiclaw" ? (
-            <>
-              <span>{project.index}</span>
-              <span className="project__meta-line" />
-              <span>{project.year}</span>
-            </>
-          ) : (
+          {project.id !== "weiclaw" && (
             <>
               <span>{project.index} / 04</span>
               <span>{project.year}</span>
