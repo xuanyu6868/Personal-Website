@@ -5,7 +5,7 @@ import type { PaperTextureKey } from "./webglPaperRenderer";
 export type PaperTextureRequestInput = {
   leftPage: WeiClawBookPage;
   rightPage: WeiClawBookPage | null;
-  underPage: WeiClawBookPage;
+  underPage: WeiClawBookPage | null;
   turningFrontPage: WeiClawBookPage | null;
   turningBackPage: WeiClawBookPage | null;
   direction: "next" | "previous" | null;
@@ -16,22 +16,6 @@ export type PaperTextureRequest = {
   page: WeiClawBookPage | null;
   side: PageSide;
 };
-
-export type PaperTexturePreloadRequest = Omit<PaperTextureRequest, "role">;
-
-export function createPaperTexturePreloadRequests(
-  pages: readonly WeiClawBookPage[],
-): PaperTexturePreloadRequest[] {
-  const pageRequests: PaperTexturePreloadRequest[] = pages.map((page, index) => ({
-    page,
-    side: index % 2 === 0 ? "left" : "right",
-  }));
-  return [
-    ...pageRequests,
-    { page: null, side: "left" },
-    { page: null, side: "right" },
-  ];
-}
 
 export function createPaperTextureRequests(input: PaperTextureRequestInput): PaperTextureRequest[] {
   const turningSide = input.direction === "previous" ? "left" : "right";

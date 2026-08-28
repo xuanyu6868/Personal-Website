@@ -2,13 +2,10 @@
 
 import { useEffect, useRef } from "react";
 
-import { weiclawBookPages, type WeiClawBookPage } from "../../data/weiclaw-book";
+import type { WeiClawBookPage } from "../../data/weiclaw-book";
 import { createPageTexture } from "./createPageTexture";
 import { createPaperRenderScheduler, type PaperRenderScheduler } from "./paperRenderScheduler";
-import {
-  createPaperTexturePreloadRequests,
-  createPaperTextureRequests,
-} from "./paperTextureRequests";
+import { createPaperTextureRequests } from "./paperTextureRequests";
 import {
   WeiClawPaperRenderer,
   type PaperRenderFrame,
@@ -18,7 +15,7 @@ import {
 export type WeiClawPaperMeshProps = {
   leftPage: WeiClawBookPage;
   rightPage: WeiClawBookPage | null;
-  underPage: WeiClawBookPage;
+  underPage: WeiClawBookPage | null;
   turningFrontPage: WeiClawBookPage | null;
   turningBackPage: WeiClawBookPage | null;
   direction: "next" | "previous" | null;
@@ -62,6 +59,7 @@ export default function WeiClawPaperMesh(props: WeiClawPaperMeshProps) {
   const onReadyRef = useRef(props.onReady);
   const intersectingRef = useRef(true);
   const mountedRef = useRef(false);
+  const readyRef = useRef(false);
 
   useEffect(() => {
     onReadyRef.current = props.onReady;
@@ -75,7 +73,18 @@ export default function WeiClawPaperMesh(props: WeiClawPaperMeshProps) {
     const render = () => {
       const renderer = rendererRef.current;
       const frame = frameRef.current;
-      if (renderer && frame) renderer.render(frame);
+      if (!renderer || !frame) return;
+      try {
+        renderer.render(frame);
+        if (!readyRef.current) {
+          readyRef.current = true;
+          onReadyRef.current(true);
+        }
+      } catch (error) {
+        console.error("Unable to render WeiClaw paper frame", error);
+        readyRef.current = false;
+        onReadyRef.current(false);
+      }
     };
     const scheduler = createPaperRenderScheduler({
       requestFrame: (callback) => window.requestAnimationFrame(callback),
@@ -119,12 +128,12 @@ export default function WeiClawPaperMesh(props: WeiClawPaperMeshProps) {
       event.preventDefault();
       rendererRef.current?.dispose();
       rendererRef.current = null;
+      readyRef.current = false;
       onReadyRef.current(false);
     };
     const onContextRestored = () => {
       try {
         createRenderer();
-        onReadyRef.current(Boolean(frameRef.current));
       } catch (error) {
         console.error("Unable to restore WeiClaw paper renderer", error);
         onReadyRef.current(false);
@@ -145,12 +154,14 @@ export default function WeiClawPaperMesh(props: WeiClawPaperMeshProps) {
       document.removeEventListener("visibilitychange", syncVisibility);
       rendererRef.current?.dispose();
       rendererRef.current = null;
+      readyRef.current = false;
       onReadyRef.current(false);
     };
   }, []);
 
   useEffect(() => {
     let cancelled = false;
+    readyRef.current = false;
     onReadyRef.current(false);
     const requests = createPaperTextureRequests({
       leftPage: props.leftPage,
@@ -160,9 +171,11 @@ export default function WeiClawPaperMesh(props: WeiClawPaperMeshProps) {
       turningBackPage: props.turningBackPage,
       direction: props.direction,
     });
+    const activeKeys = new Set<string>();
 
     const loadTexture = (page: WeiClawBookPage | null, side: "left" | "right") => {
       const key = `${page?.id ?? "blank"}:${side}`;
+      activeKeys.add(key);
       const cached = textureCacheRef.current.get(key);
       if (cached) return cached;
       const promise = page
@@ -172,15 +185,10 @@ export default function WeiClawPaperMesh(props: WeiClawPaperMeshProps) {
       return promise;
     };
 
-    const preloadRequests = createPaperTexturePreloadRequests(weiclawBookPages);
-    const textureEntries = Promise.all(
+    void Promise.all(
       requests.map(async (request) => [request.role, await loadTexture(request.page, request.side)] as const),
-    );
-    const preloadTextures = Promise.all(
-      preloadRequests.map((request) => loadTexture(request.page, request.side)),
-    );
-    void Promise.all([textureEntries, preloadTextures])
-      .then(([entries]) => {
+    )
+      .then((entries) => {
         if (cancelled || !mountedRef.current) return;
         const textures = Object.fromEntries(entries) as PaperTextureSet;
         textureSetRef.current = textures;
@@ -188,8 +196,10 @@ export default function WeiClawPaperMesh(props: WeiClawPaperMeshProps) {
           textures,
           ...dynamicFrameRef.current,
         };
+        for (const key of textureCacheRef.current.keys()) {
+          if (!activeKeys.has(key)) textureCacheRef.current.delete(key);
+        }
         schedulerRef.current?.schedule();
-        onReadyRef.current(Boolean(rendererRef.current));
       })
       .catch((error) => {
         if (cancelled) return;

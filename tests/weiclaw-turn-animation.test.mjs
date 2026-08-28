@@ -1,7 +1,10 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { animatePaperProgress } from "../components/weiclaw/paperTurnAnimation.ts";
+import {
+  animatePaperProgress,
+  shouldCompletePaperTurn,
+} from "../components/weiclaw/paperTurnAnimation.ts";
 
 function createAnimationHarness() {
   let now = 0;
@@ -94,4 +97,11 @@ test("cancellation prevents later updates and completion", () => {
   harness.advance(500);
   assert.deepEqual(values, []);
   assert.equal(completed, 0);
+});
+
+test("completes on either sufficient distance or an intentional flick", () => {
+  assert.equal(shouldCompletePaperTurn(0.29, 0), true);
+  assert.equal(shouldCompletePaperTurn(0.12, 0.48), true);
+  assert.equal(shouldCompletePaperTurn(0.12, 0.08), false);
+  assert.equal(shouldCompletePaperTurn(0.27, -0.5), false);
 });

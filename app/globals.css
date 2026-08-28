@@ -889,7 +889,6 @@ a:focus-visible { outline: 1px solid var(--accent); outline-offset: 5px; }
   .project__media,.project--featured .project__media { min-height:430px; height:55vh; }
   .weiclaw-book-scene { gap:10px; padding-block:30px 64px; }
   .weiclaw-book-stage { min-height:clamp(300px,74vw,410px); }
-  .weiclaw-book { aspect-ratio:1.28; }
   .weiclaw-book__page { padding:16px 14px 18px; }
   .weiclaw-book__page-note { display:none; }
   .weiclaw-book__page-title { font-size:clamp(15px,4.4vw,25px); }

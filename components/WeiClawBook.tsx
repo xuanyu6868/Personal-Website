@@ -12,9 +12,12 @@ import { useReducedMotion } from "framer-motion";
 import Image from "next/image";
 import { weiclawBookPages, type WeiClawBookPage } from "../data/weiclaw-book";
 import WeiClawPaperMesh from "./weiclaw/WeiClawPaperMesh";
-import { animatePaperProgress, type PaperProgressAnimation } from "./weiclaw/paperTurnAnimation";
+import {
+  animatePaperProgress,
+  shouldCompletePaperTurn,
+  type PaperProgressAnimation,
+} from "./weiclaw/paperTurnAnimation";
 
-const DRAG_THRESHOLD = 0.28;
 const TURN_DURATION = 760;
 const TURN_RETURN_DURATION = 420;
 
@@ -24,6 +27,9 @@ type DragState = {
   startX: number;
   progress: number;
   pointerId: number;
+  lastX: number;
+  lastTimestamp: number;
+  velocity: number;
 };
 
 function clamp(value: number, min = 0, max = 1) {
@@ -92,7 +98,7 @@ export default function WeiClawBook() {
   const currentPage = weiclawBookPages[spreadStart] ?? weiclawBookPages[0];
   const nextPage = weiclawBookPages[spreadStart + 1] ?? null;
   const nextSpreadLeft = weiclawBookPages[spreadStart + 2] ?? nextPage ?? currentPage;
-  const nextSpreadRight = weiclawBookPages[spreadStart + 3] ?? nextSpreadLeft;
+  const nextSpreadRight = weiclawBookPages[spreadStart + 3] ?? null;
   const previousSpreadLeft = weiclawBookPages[Math.max(0, spreadStart - 2)] ?? currentPage;
   const previousSpreadRight = weiclawBookPages[Math.max(0, spreadStart - 1)] ?? currentPage;
   const turnFrontPage = dragDirection === "previous" ? currentPage : nextPage;
@@ -170,7 +176,15 @@ export default function WeiClawBook() {
   const onPointerDown = (event: ReactPointerEvent<HTMLElement>, direction: TurnDirection) => {
     if (turning || returning || (direction === "next" && !canGoNext) || (direction === "previous" && !canGoPrevious)) return;
     event.currentTarget.setPointerCapture(event.pointerId);
-    dragRef.current = { direction, startX: event.clientX, progress: 0, pointerId: event.pointerId };
+    dragRef.current = {
+      direction,
+      startX: event.clientX,
+      progress: 0,
+      pointerId: event.pointerId,
+      lastX: event.clientX,
+      lastTimestamp: event.timeStamp,
+      velocity: 0,
+    };
     movedRef.current = false;
     setDragging(true);
     setDragDirection(direction);
@@ -186,6 +200,10 @@ export default function WeiClawBook() {
       const relativeX = (event.clientX - rect.left) / rect.width;
       const edge = relativeX > 0.74 && canGoNext ? "next" : relativeX < 0.26 && canGoPrevious ? "previous" : null;
       setHoverEdge(edge);
+      if (reduceMotion) {
+        setParallax({ x: 0, y: 0 });
+        return;
+      }
       setParallax({
         x: Math.max(-1.5, Math.min(1.5, (relativeX - 0.5) * 3)),
         y: Math.max(-1, Math.min(1, ((event.clientY - rect.top) / rect.height - 0.5) * 2)),
@@ -197,6 +215,14 @@ export default function WeiClawBook() {
       ? drag.startX - event.clientX
       : event.clientX - drag.startX;
     const progress = clamp(distance / (rect.width * 0.46));
+    const elapsed = Math.max(1, event.timeStamp - drag.lastTimestamp);
+    const signedDelta = drag.direction === "next"
+      ? drag.lastX - event.clientX
+      : event.clientX - drag.lastX;
+    const instantaneousVelocity = signedDelta / elapsed;
+    drag.velocity = drag.velocity * 0.55 + instantaneousVelocity * 0.45;
+    drag.lastX = event.clientX;
+    drag.lastTimestamp = event.timeStamp;
     if (progress > 0.02) movedRef.current = true;
     drag.progress = progress;
     setProgress(progress);
@@ -216,7 +242,7 @@ export default function WeiClawBook() {
     }
     suppressClickRef.current = true;
     window.setTimeout(() => { suppressClickRef.current = false; }, 0);
-    if (drag.progress >= DRAG_THRESHOLD) finishTurn(drag.direction);
+    if (shouldCompletePaperTurn(drag.progress, drag.velocity)) finishTurn(drag.direction);
     else returnPage(drag.direction);
   };
 

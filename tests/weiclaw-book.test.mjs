@@ -18,6 +18,10 @@ const stylesheet = await readFile(
   new URL("../app/globals.css", import.meta.url),
   "utf8",
 );
+const paperMeshSource = await readFile(
+  new URL("../components/weiclaw/WeiClawPaperMesh.tsx", import.meta.url),
+  "utf8",
+);
 const designSource = `${componentSource}\n${stylesheet}`;
 
 test("defines five distinct WeiClaw book pages with real raster media", () => {
@@ -40,7 +44,8 @@ test("supports pointer drag, edge click, pointer capture, and snap thresholds", 
   assert.match(componentSource, /onPointerMove/);
   assert.match(componentSource, /onPointerUp/);
   assert.match(componentSource, /setPointerCapture/);
-  assert.match(componentSource, /DRAG_THRESHOLD/);
+  assert.match(componentSource, /shouldCompletePaperTurn/);
+  assert.match(componentSource, /instantaneousVelocity/);
   assert.match(componentSource, /const finishTurn[\s\S]*?movedRef\.current = false/);
   assert.match(componentSource, /<button[^>]+aria-label="Previous page"/);
   assert.match(componentSource, /<button[^>]+aria-label="Next page"/);
@@ -82,6 +87,8 @@ test("passes distinct front, back, and under-page textures to the mesh", () => {
   assert.match(componentSource, /underPage=\{underPage\}/);
   assert.match(componentSource, /direction=\{dragDirection\}/);
   assert.match(componentSource, /progress=\{dragProgress\}/);
+  assert.match(componentSource, /const nextSpreadRight = weiclawBookPages\[spreadStart \+ 3\] \?\? null/);
+  assert.match(paperMeshSource, /underPage: WeiClawBookPage \| null/);
 });
 
 test("animates completion and return from the released mesh progress", () => {
@@ -112,5 +119,10 @@ test("does not install a wheel handler for the book and honors reduced motion", 
   assert.doesNotMatch(componentSource, /addEventListener\(["']wheel/);
   assert.match(componentSource, /useReducedMotion/);
   assert.match(designSource, /prefers-reduced-motion/);
+  assert.match(componentSource, /if \(reduceMotion\)[\s\S]*?setParallax\(\{ x: 0, y: 0 \}\)/);
   assert.match(componentSource, /removeEventListener/);
+});
+
+test("preserves the photographic shell registration on narrow screens", () => {
+  assert.doesNotMatch(stylesheet, /@media \(max-width:560px\)[\s\S]*?\.weiclaw-book\s*\{[^}]*aspect-ratio:1\.28/);
 });

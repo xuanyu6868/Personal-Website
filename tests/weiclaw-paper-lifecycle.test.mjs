@@ -1,12 +1,15 @@
 import assert from "node:assert/strict";
+import { readFile } from "node:fs/promises";
 import test from "node:test";
 
-import {
-  createPaperTexturePreloadRequests,
-  createPaperTextureRequests,
-} from "../components/weiclaw/paperTextureRequests.ts";
+import { createPaperTextureRequests } from "../components/weiclaw/paperTextureRequests.ts";
 import { createPaperRenderScheduler } from "../components/weiclaw/paperRenderScheduler.ts";
 import { weiclawBookPages } from "../data/weiclaw-book.ts";
+
+const meshComponentSource = await readFile(
+  new URL("../components/weiclaw/WeiClawPaperMesh.tsx", import.meta.url),
+  "utf8",
+);
 
 function createFrameHarness() {
   const callbacks = new Map();
@@ -111,16 +114,12 @@ test("builds all five renderer texture roles and preserves blank boundary pages"
   assert.equal(requests[4].side, "left");
 });
 
-test("preloads every editorial page on its physical book side before interaction", () => {
-  const requests = createPaperTexturePreloadRequests(weiclawBookPages);
+test("reports readiness only after a successful renderer frame", () => {
+  assert.match(meshComponentSource, /renderer\.render\(frame\);[\s\S]*?onReadyRef\.current\(true\)/);
+  assert.doesNotMatch(meshComponentSource, /schedulerRef\.current\?\.schedule\(\);\s*onReadyRef\.current\(Boolean\(rendererRef\.current\)\)/);
+});
 
-  assert.deepEqual(requests.map((request) => `${request.page?.id ?? "blank"}:${request.side}`), [
-    "dashboard:left",
-    "chat:right",
-    "customer:left",
-    "agent:right",
-    "settings:left",
-    "blank:left",
-    "blank:right",
-  ]);
+test("keeps the texture cache scoped to active and adjacent turn surfaces", () => {
+  assert.doesNotMatch(meshComponentSource, /createPaperTexturePreloadRequests/);
+  assert.match(meshComponentSource, /textureCacheRef\.current\.delete\(key\)/);
 });

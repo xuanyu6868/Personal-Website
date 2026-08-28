@@ -14,6 +14,13 @@ export type PaperProgressAnimation = {
   cancel: () => void;
 };
 
+const TURN_DISTANCE_THRESHOLD = 0.28;
+const TURN_VELOCITY_THRESHOLD = 0.35;
+
+export function shouldCompletePaperTurn(progress: number, velocity: number) {
+  return progress >= TURN_DISTANCE_THRESHOLD || velocity >= TURN_VELOCITY_THRESHOLD;
+}
+
 export function animatePaperProgress(options: PaperProgressAnimationOptions): PaperProgressAnimation {
   let frame = 0;
   let cancelled = false;
