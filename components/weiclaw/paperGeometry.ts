@@ -82,6 +82,13 @@ const settledDepth = (u: number, v: number) => {
   return spineDip + outerLift + verticalBow;
 };
 
+const openBookBoundaryOffset = (u: number, v: number) => {
+  const arch = Math.sin(Math.PI * u);
+  const topOffset = 0.025 * (1 - u) + 0.035 * arch;
+  const bottomOffset = -0.035 * (1 - u) - 0.012 * arch;
+  return topOffset * (1 - v) + bottomOffset * v;
+};
+
 function createIndices(columns: number, rows: number) {
   const indices = new Uint16Array(columns * rows * 6);
   let cursor = 0;
@@ -139,7 +146,7 @@ export function createPaperMesh(options: PaperMeshOptions): PaperMesh {
 
   for (let row = 0; row <= rows; row += 1) {
     const v = row / rows;
-    const y = (0.5 - v) * height;
+    const baseY = (0.5 - v) * height;
     let integratedX = 0;
     let integratedZ = 0;
     let previousAngle = 0;
@@ -179,10 +186,10 @@ export function createPaperMesh(options: PaperMeshOptions): PaperMesh {
       }
 
       positions[offset] = x;
-      positions[offset + 1] = y;
+      positions[offset + 1] = baseY + openBookBoundaryOffset(u, v);
       positions[offset + 2] = z;
       const uvOffset = (row * (columns + 1) + column) * 2;
-      uvs[uvOffset] = u;
+      uvs[uvOffset] = options.side === "left" ? 1 - u : u;
       uvs[uvOffset + 1] = 1 - v;
     }
   }

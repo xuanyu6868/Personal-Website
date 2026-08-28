@@ -1,7 +1,10 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { createPaperTextureRequests } from "../components/weiclaw/paperTextureRequests.ts";
+import {
+  createPaperTexturePreloadRequests,
+  createPaperTextureRequests,
+} from "../components/weiclaw/paperTextureRequests.ts";
 import { createPaperRenderScheduler } from "../components/weiclaw/paperRenderScheduler.ts";
 import { weiclawBookPages } from "../data/weiclaw-book.ts";
 
@@ -106,4 +109,18 @@ test("builds all five renderer texture roles and preserves blank boundary pages"
   assert.equal(requests[1].page, null);
   assert.equal(requests[3].page, null);
   assert.equal(requests[4].side, "left");
+});
+
+test("preloads every editorial page on its physical book side before interaction", () => {
+  const requests = createPaperTexturePreloadRequests(weiclawBookPages);
+
+  assert.deepEqual(requests.map((request) => `${request.page?.id ?? "blank"}:${request.side}`), [
+    "dashboard:left",
+    "chat:right",
+    "customer:left",
+    "agent:right",
+    "settings:left",
+    "blank:left",
+    "blank:right",
+  ]);
 });

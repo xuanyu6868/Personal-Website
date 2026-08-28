@@ -74,7 +74,8 @@ const paperFragmentShader = `
     float diffuse = 0.82 + max(dot(normal, normalize(uLightDirection)), 0.0) * 0.20;
     float spineShade = 1.0 - uSpineDarkening * exp(-abs(vWorldPosition.x) * 16.0);
     float crest = pow(max(dot(normal, normalize(vec3(-0.25, 0.35, 1.0))), 0.0), 7.0) * 0.055;
-    vec4 paper = texture2D(uPageTexture, vUv);
+    vec2 paperUv = vec2(uBackFace > 0.5 ? 1.0 - vUv.x : vUv.x, vUv.y);
+    vec4 paper = texture2D(uPageTexture, paperUv);
     gl_FragColor = vec4(paper.rgb * diffuse * spineShade + crest, paper.a);
   }
 `;

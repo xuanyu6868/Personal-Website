@@ -112,6 +112,50 @@ test("settles on opposite sides and mirrors previous-page turns", () => {
   assert.ok(Math.abs(position(nextEnd, 40)[0] + position(previousEnd, 40)[0]) < 0.02);
 });
 
+test("maps both settled page textures in normal reading order", () => {
+  const left = createPaperMesh({
+    ...options,
+    side: "left",
+    mode: "settled",
+    progress: 0,
+  });
+  const right = createPaperMesh({
+    ...options,
+    side: "right",
+    mode: "settled",
+    progress: 0,
+  });
+
+  const leftOuterU = left.uvs[options.columns * 2];
+  const leftSpineU = left.uvs[0];
+  const rightSpineU = right.uvs[0];
+  const rightOuterU = right.uvs[options.columns * 2];
+
+  assert.equal(leftOuterU, 0, "left page outer edge should show the texture's left edge");
+  assert.equal(leftSpineU, 1, "left page spine should show the texture's right edge");
+  assert.equal(rightSpineU, 0, "right page spine should show the texture's left edge");
+  assert.equal(rightOuterU, 1, "right page outer edge should show the texture's right edge");
+});
+
+test("shapes settled page boundaries like an open book instead of rectangles", () => {
+  const mesh = createPaperMesh({
+    ...options,
+    side: "right",
+    mode: "settled",
+    progress: 0,
+  });
+
+  const topSpine = position(mesh, 0, 0)[1];
+  const topMid = position(mesh, 20, 0)[1];
+  const topOuter = position(mesh, 40, 0)[1];
+  const bottomSpine = position(mesh, 0, 16)[1];
+  const bottomOuter = position(mesh, 40, 16)[1];
+
+  assert.ok(topMid > topOuter + 0.025, "top edge should arch upward between spine and fore edge");
+  assert.ok(topSpine > topOuter + 0.015, "top edge should stay raised at the binding");
+  assert.ok(bottomSpine < bottomOuter - 0.025, "bottom edge should dip into the binding");
+});
+
 test("returns finite positions, normals, uvs, and valid indices", () => {
   for (const progress of [0, 0.2, 0.5, 0.8, 1]) {
     const mesh = createPaperMesh({

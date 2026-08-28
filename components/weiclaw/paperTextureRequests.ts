@@ -17,6 +17,22 @@ export type PaperTextureRequest = {
   side: PageSide;
 };
 
+export type PaperTexturePreloadRequest = Omit<PaperTextureRequest, "role">;
+
+export function createPaperTexturePreloadRequests(
+  pages: readonly WeiClawBookPage[],
+): PaperTexturePreloadRequest[] {
+  const pageRequests: PaperTexturePreloadRequest[] = pages.map((page, index) => ({
+    page,
+    side: index % 2 === 0 ? "left" : "right",
+  }));
+  return [
+    ...pageRequests,
+    { page: null, side: "left" },
+    { page: null, side: "right" },
+  ];
+}
+
 export function createPaperTextureRequests(input: PaperTextureRequestInput): PaperTextureRequest[] {
   const turningSide = input.direction === "previous" ? "left" : "right";
   const backSide = turningSide === "right" ? "left" : "right";

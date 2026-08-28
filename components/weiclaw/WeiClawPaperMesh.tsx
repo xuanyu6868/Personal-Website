@@ -2,10 +2,13 @@
 
 import { useEffect, useRef } from "react";
 
-import type { WeiClawBookPage } from "../../data/weiclaw-book";
+import { weiclawBookPages, type WeiClawBookPage } from "../../data/weiclaw-book";
 import { createPageTexture } from "./createPageTexture";
 import { createPaperRenderScheduler, type PaperRenderScheduler } from "./paperRenderScheduler";
-import { createPaperTextureRequests } from "./paperTextureRequests";
+import {
+  createPaperTexturePreloadRequests,
+  createPaperTextureRequests,
+} from "./paperTextureRequests";
 import {
   WeiClawPaperRenderer,
   type PaperRenderFrame,
@@ -142,11 +145,9 @@ export default function WeiClawPaperMesh(props: WeiClawPaperMeshProps) {
     let cancelled = false;
     onReadyRef.current(false);
     const requests = createPaperTextureRequests(props);
-    const activeKeys = new Set<string>();
 
     const loadTexture = (page: WeiClawBookPage | null, side: "left" | "right") => {
       const key = `${page?.id ?? "blank"}:${side}`;
-      activeKeys.add(key);
       const cached = textureCacheRef.current.get(key);
       if (cached) return cached;
       const promise = page
@@ -156,8 +157,15 @@ export default function WeiClawPaperMesh(props: WeiClawPaperMeshProps) {
       return promise;
     };
 
-    void Promise.all(requests.map(async (request) => [request.role, await loadTexture(request.page, request.side)] as const))
-      .then((entries) => {
+    const preloadRequests = createPaperTexturePreloadRequests(weiclawBookPages);
+    const textureEntries = Promise.all(
+      requests.map(async (request) => [request.role, await loadTexture(request.page, request.side)] as const),
+    );
+    const preloadTextures = Promise.all(
+      preloadRequests.map((request) => loadTexture(request.page, request.side)),
+    );
+    void Promise.all([textureEntries, preloadTextures])
+      .then(([entries]) => {
         if (cancelled || !mountedRef.current) return;
         const textures = Object.fromEntries(entries) as PaperTextureSet;
         textureSetRef.current = textures;
@@ -169,9 +177,6 @@ export default function WeiClawPaperMesh(props: WeiClawPaperMeshProps) {
           hoverLift: props.hoverLift,
           reducedMotion: props.reducedMotion,
         };
-        for (const key of textureCacheRef.current.keys()) {
-          if (!activeKeys.has(key)) textureCacheRef.current.delete(key);
-        }
         schedulerRef.current?.schedule();
         onReadyRef.current(Boolean(rendererRef.current));
       })
