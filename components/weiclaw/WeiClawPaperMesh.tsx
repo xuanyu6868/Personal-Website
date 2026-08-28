@@ -12,7 +12,6 @@ import {
 import {
   WeiClawPaperRenderer,
   type PaperRenderFrame,
-  type PaperTextureKey,
   type PaperTextureSet,
 } from "./webglPaperRenderer";
 
@@ -52,12 +51,21 @@ export default function WeiClawPaperMesh(props: WeiClawPaperMeshProps) {
   const schedulerRef = useRef<PaperRenderScheduler | null>(null);
   const frameRef = useRef<PaperRenderFrame | null>(null);
   const textureSetRef = useRef<PaperTextureSet | null>(null);
+  const dynamicFrameRef = useRef<Pick<PaperRenderFrame, "direction" | "hoverDirection" | "progress" | "hoverLift" | "reducedMotion">>({
+    direction: props.direction,
+    hoverDirection: props.hoverDirection,
+    progress: props.progress,
+    hoverLift: props.hoverLift,
+    reducedMotion: props.reducedMotion,
+  });
   const textureCacheRef = useRef(new Map<string, Promise<HTMLCanvasElement>>());
   const onReadyRef = useRef(props.onReady);
   const intersectingRef = useRef(true);
   const mountedRef = useRef(false);
 
-  onReadyRef.current = props.onReady;
+  useEffect(() => {
+    onReadyRef.current = props.onReady;
+  }, [props.onReady]);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -144,7 +152,14 @@ export default function WeiClawPaperMesh(props: WeiClawPaperMeshProps) {
   useEffect(() => {
     let cancelled = false;
     onReadyRef.current(false);
-    const requests = createPaperTextureRequests(props);
+    const requests = createPaperTextureRequests({
+      leftPage: props.leftPage,
+      rightPage: props.rightPage,
+      underPage: props.underPage,
+      turningFrontPage: props.turningFrontPage,
+      turningBackPage: props.turningBackPage,
+      direction: props.direction,
+    });
 
     const loadTexture = (page: WeiClawBookPage | null, side: "left" | "right") => {
       const key = `${page?.id ?? "blank"}:${side}`;
@@ -171,11 +186,7 @@ export default function WeiClawPaperMesh(props: WeiClawPaperMeshProps) {
         textureSetRef.current = textures;
         frameRef.current = {
           textures,
-          direction: props.direction,
-          hoverDirection: props.hoverDirection,
-          progress: props.progress,
-          hoverLift: props.hoverLift,
-          reducedMotion: props.reducedMotion,
+          ...dynamicFrameRef.current,
         };
         schedulerRef.current?.schedule();
         onReadyRef.current(Boolean(rendererRef.current));
@@ -199,15 +210,18 @@ export default function WeiClawPaperMesh(props: WeiClawPaperMeshProps) {
   ]);
 
   useEffect(() => {
-    const textures = textureSetRef.current;
-    if (!textures) return;
-    frameRef.current = {
-      textures,
+    dynamicFrameRef.current = {
       direction: props.direction,
       hoverDirection: props.hoverDirection,
       progress: props.progress,
       hoverLift: props.hoverLift,
       reducedMotion: props.reducedMotion,
+    };
+    const textures = textureSetRef.current;
+    if (!textures) return;
+    frameRef.current = {
+      textures,
+      ...dynamicFrameRef.current,
     };
     schedulerRef.current?.schedule();
   }, [props.direction, props.hoverDirection, props.hoverLift, props.progress, props.reducedMotion]);
