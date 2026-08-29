@@ -56,6 +56,27 @@ test("continues from the released progress and completes at the target", () => {
   assert.equal(harness.pending, 0);
 });
 
+test("lifts the paper corner gradually instead of jumping into a board-like flip", () => {
+  const harness = createAnimationHarness();
+  const values = [];
+  animatePaperProgress({
+    from: 0,
+    to: 1,
+    duration: 1000,
+    reducedMotion: false,
+    requestFrame: harness.requestFrame,
+    cancelFrame: harness.cancelFrame,
+    now: harness.now,
+    onUpdate: (value) => values.push(value),
+    onComplete: () => undefined,
+  });
+
+  harness.advance(100);
+  assert.ok(values[0] < 0.08, `first tenth jumped too far: ${values[0]}`);
+  harness.advance(400);
+  assert.ok(Math.abs(values[1] - 0.5) < 0.04, `half turn should remain near the curved midpoint: ${values[1]}`);
+});
+
 test("finishes immediately when reduced motion is requested", () => {
   const harness = createAnimationHarness();
   const values = [];

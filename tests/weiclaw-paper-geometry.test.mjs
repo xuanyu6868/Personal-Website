@@ -74,6 +74,23 @@ test("forms a non-collinear curved cross-section at half turn", () => {
   assert.ok(new Set(depths.map((value) => value.toFixed(3))).size >= 5);
 });
 
+test("keeps a visible curl instead of becoming a rigid board late in the turn", () => {
+  const mesh = createPaperMesh({
+    ...options,
+    side: "right",
+    mode: "turning",
+    direction: "next",
+    progress: 0.8,
+  });
+  const start = position(mesh, 0);
+  const middle = position(mesh, 20);
+  const end = position(mesh, 40);
+  const lineAmount = (middle[0] - start[0]) / (end[0] - start[0]);
+  const linearDepth = start[2] + (end[2] - start[2]) * lineAmount;
+
+  assert.ok(Math.abs(middle[2] - linearDepth) > 0.085, "late-turn sheet should retain a curved ridge");
+});
+
 test("lags top and bottom corners behind the page center", () => {
   const mesh = createPaperMesh({
     ...options,
@@ -156,6 +173,60 @@ test("shapes settled page boundaries like an open book instead of rectangles", (
   assert.ok(bottomSpine < bottomOuter - 0.025, "bottom edge should dip into the binding");
 });
 
+test("forms a continuous thick-book cross-section while settled", () => {
+  const mesh = createPaperMesh({
+    ...options,
+    side: "right",
+    mode: "settled",
+    progress: 0,
+  });
+
+  const spine = position(mesh, 0)[2];
+  const innerCrest = position(mesh, 6)[2];
+  const middleFall = position(mesh, 23)[2];
+  const outerLift = position(mesh, 40)[2];
+
+  assert.ok(spine < -0.012, "the sheet should settle into the binding");
+  assert.ok(innerCrest > middleFall + 0.008, "the inner sheet stack should crest before falling");
+  assert.ok(outerLift > middleFall + 0.006, "the fore edge should lift again after the middle fall");
+});
+
+test("breaks the perfectly straight settled fore edge", () => {
+  const mesh = createPaperMesh({
+    ...options,
+    side: "right",
+    mode: "settled",
+    progress: 0,
+  });
+  const outerXs = [0, 4, 8, 12, 16].map((row) => position(mesh, 40, row)[0]);
+
+  assert.ok(Math.max(...outerXs) - Math.min(...outerXs) > 0.004);
+  assert.notEqual(outerXs[0].toFixed(4), outerXs[16 / 4].toFixed(4));
+});
+
+test("folds the lower fore corner inward on page-edge hover", () => {
+  const settled = createPaperMesh({
+    ...options,
+    side: "right",
+    mode: "settled",
+    progress: 0,
+  });
+  const lifted = createPaperMesh({
+    ...options,
+    side: "right",
+    mode: "turning",
+    direction: "next",
+    progress: 0,
+    cornerLift: 1,
+  });
+  const rest = position(settled, 40, 16);
+  const hover = position(lifted, 40, 16);
+
+  assert.ok(rest[0] - hover[0] > 0.03, "hovered right corner should pull toward the spine");
+  assert.ok(hover[1] - rest[1] > 0.02, "hovered lower corner should visibly lift upward");
+  assert.ok(hover[2] - rest[2] > 0.04, "hovered lower corner should rise off the page stack");
+});
+
 test("returns finite positions, normals, uvs, and valid indices", () => {
   for (const progress of [0, 0.2, 0.5, 0.8, 1]) {
     const mesh = createPaperMesh({
@@ -201,5 +272,8 @@ test("projects a progress-sensitive feathered shadow below the moving page", () 
   assert.equal(shadow.positions.length, mesh.positions.length);
   assert.equal(shadow.alphas.length, mesh.positions.length / 3);
   assert.ok(Math.max(...shadow.alphas) > 0.2);
+  assert.ok(Math.max(...shadow.alphas) <= 0.36, "cast shadow should stay translucent");
+  const topRow = Array.from(shadow.alphas.slice(0, mesh.columns + 1));
+  assert.ok(Math.max(...topRow) < 0.04, "cast shadow must feather away at the top page edge");
   assert.ok(Array.from(shadow.positions).every((value, index) => index % 3 !== 2 || Math.abs(value + 0.018) < 1e-6));
 });

@@ -71,12 +71,19 @@ const paperFragmentShader = `
   uniform float uBackFace;
   void main() {
     vec3 normal = normalize(vNormal) * (uBackFace > 0.5 ? -1.0 : 1.0);
-    float diffuse = 0.82 + max(dot(normal, normalize(uLightDirection)), 0.0) * 0.20;
-    float spineShade = 1.0 - uSpineDarkening * exp(-abs(vWorldPosition.x) * 16.0);
-    float crest = pow(max(dot(normal, normalize(vec3(-0.25, 0.35, 1.0))), 0.0), 7.0) * 0.055;
+    float diffuse = 0.72 + max(dot(normal, normalize(uLightDirection)), 0.0) * 0.34;
+    float spineShade = 1.0 - uSpineDarkening * exp(-abs(vWorldPosition.x) * 6.4);
+    float crest = pow(max(dot(normal, normalize(vec3(-0.31, 0.33, 1.0))), 0.0), 8.0) * 0.038;
+    float pageDistance = abs(vWorldPosition.x);
+    float innerLift = 0.052 * exp(-pow((pageDistance - 0.16) / 0.115, 2.0));
+    float middleSettle = 0.034 * exp(-pow((pageDistance - 0.57) / 0.27, 2.0));
+    float outerLift = 0.022 * smoothstep(0.7, 1.02, pageDistance);
+    float foldLighting = 1.0 + innerLift - middleSettle + outerLift;
     vec2 paperUv = vec2(uBackFace > 0.5 ? 1.0 - vUv.x : vUv.x, vUv.y);
     vec4 paper = texture2D(uPageTexture, paperUv);
-    gl_FragColor = vec4(paper.rgb * diffuse * spineShade + crest, paper.a);
+    float edgeDistance = min(min(paperUv.x, 1.0 - paperUv.x), min(paperUv.y, 1.0 - paperUv.y));
+    float edgeShade = mix(0.965, 1.0, smoothstep(0.0, 0.028, edgeDistance));
+    gl_FragColor = vec4(paper.rgb * diffuse * spineShade * edgeShade * foldLighting + crest, paper.a);
   }
 `;
 
@@ -151,7 +158,7 @@ export function createPaperViewProjection(aspect: number) {
     1, 0, 0, 0,
     0, 1, 0, 0,
     0, 0, 1, 0,
-    0, 0, -2.32, 1,
+    0, 0, -2.28, 1,
   ]);
   return multiplyMatrices(projection, view);
 }
@@ -367,8 +374,8 @@ export class WeiClawPaperRenderer {
     gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, this.indexBuffer);
     gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, mesh.indices, gl.DYNAMIC_DRAW);
     gl.uniformMatrix4fv(this.paperLocations.matrix, false, this.matrix);
-    gl.uniform3f(this.paperLocations.lightDirection, -0.28, 0.42, 1);
-    gl.uniform1f(this.paperLocations.spineDarkening, face === "settled" ? 0.18 : 0.24);
+    gl.uniform3f(this.paperLocations.lightDirection, -0.62, 0.22, 1);
+    gl.uniform1f(this.paperLocations.spineDarkening, face === "settled" ? 0.08 : 0.125);
     gl.uniform1f(this.paperLocations.backFace, face === "back" ? 1 : 0);
     gl.activeTexture(gl.TEXTURE0);
     gl.bindTexture(gl.TEXTURE_2D, this.getTexture(canvas));
@@ -398,7 +405,7 @@ export class WeiClawPaperRenderer {
     gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, shadow.indices, gl.DYNAMIC_DRAW);
     gl.uniformMatrix4fv(this.solidLocations.matrix, false, this.matrix);
     gl.uniform3f(this.solidLocations.color, 0.08, 0.055, 0.035);
-    gl.uniform1f(this.solidLocations.opacity, 0.78);
+    gl.uniform1f(this.solidLocations.opacity, 0.58);
     gl.disable(gl.DEPTH_TEST);
     gl.depthMask(false);
     gl.drawElements(gl.TRIANGLES, shadow.indices.length, gl.UNSIGNED_SHORT, 0);

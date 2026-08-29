@@ -496,8 +496,8 @@ a:focus-visible { outline: 1px solid var(--accent); outline-offset: 5px; }
 .weiclaw-book__artwork { position:relative; z-index:2; display:block; width:112%; aspect-ratio:1.42; margin:12% -7% 0; overflow:hidden; border:1px solid rgba(65,54,42,.15); border-radius:1.5% 1% 3% 2% / 2% 2% 5% 4%; background:#f6f4ef; box-shadow:0 12px 22px rgba(74,50,31,.14); transform-origin:100% 50%; transform:perspective(900px) rotateY(3.2deg) rotate(-.45deg); }
 .weiclaw-book__page--right .weiclaw-book__artwork { width:98%; margin:12% 0 0; transform-origin:0 50%; transform:perspective(900px) rotateY(-3.2deg) rotate(.35deg); }
 .weiclaw-book__artwork img { display:block; width:100%; height:100%; object-fit:cover; filter:saturate(.72) sepia(.1) contrast(.91) brightness(1.045); }
-.weiclaw-book__paper-canvas { position:absolute; z-index:6; inset:9.5% 9.2% 13.2%; display:block; width:81.6%; height:77.3%; pointer-events:none; }
-.weiclaw-book__gutter { position:absolute; z-index:7; top:12%; bottom:14.2%; left:50%; width:4.5%; border-radius:50%; background:linear-gradient(90deg,transparent,rgba(55,34,21,.18) 28%,rgba(25,16,11,.42) 49%,rgba(255,245,224,.14) 55%,rgba(54,34,21,.17) 76%,transparent); filter:blur(2.5px); transform:translateX(-50%); pointer-events:none; }
+.weiclaw-book__paper-canvas { position:absolute; z-index:6; inset:5.6% 8.2% 10%; display:block; width:83.6%; height:84.4%; pointer-events:none; }
+.weiclaw-book__gutter { position:absolute; z-index:5; top:10.5%; bottom:13.8%; left:50%; width:11%; border-radius:46%; background:linear-gradient(90deg,transparent 2%,rgba(76,53,36,.035) 22%,rgba(52,35,24,.08) 43%,rgba(40,27,19,.11) 50%,rgba(76,53,36,.07) 59%,rgba(255,245,224,.035) 74%,transparent 98%); filter:blur(12px); transform:translateX(-50%); pointer-events:none; }
 .weiclaw-book__semantic-pages { position:absolute; width:1px; height:1px; padding:0; margin:-1px; overflow:hidden; clip:rect(0,0,0,0); white-space:nowrap; border:0; }
 .weiclaw-book__edge-hit { position:absolute; z-index:12; top:15%; bottom:17%; width:10%; border:0; background:transparent; cursor:ew-resize; }
 .weiclaw-book__edge-hit:disabled { cursor:default; }

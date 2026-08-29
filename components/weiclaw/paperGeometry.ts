@@ -75,18 +75,36 @@ const normalize = (vector: readonly number[]) => {
   return normal;
 };
 
+const gaussian = (value: number, center: number, radius: number) =>
+  Math.exp(-Math.pow((value - center) / radius, 2));
+
 const settledDepth = (u: number, v: number) => {
-  const spineDip = -0.032 * Math.exp(-u * 13);
-  const outerLift = 0.014 * u * u;
-  const verticalBow = 0.006 * (1 - Math.pow((v - 0.5) * 2, 2));
-  return spineDip + outerLift + verticalBow;
+  const spineDip = -0.04 * gaussian(u, 0, 0.088);
+  const innerCrest = 0.068 * gaussian(u, 0.16, 0.12);
+  const middleFall = -0.018 * gaussian(u, 0.57, 0.26);
+  const outerLift = 0.038 * Math.pow(smoothstep(0.64, 1, u), 1.6);
+  const verticalBow = 0.008 * (1 - Math.pow((v - 0.48) * 2, 2));
+  const pageTwist = 0.0045 * Math.sin(Math.PI * v) * (u - 0.42);
+  return spineDip + innerCrest + middleFall + outerLift + verticalBow + pageTwist;
 };
 
 const openBookBoundaryOffset = (u: number, v: number) => {
   const arch = Math.sin(Math.PI * u);
-  const topOffset = 0.025 * (1 - u) + 0.035 * arch;
-  const bottomOffset = -0.035 * (1 - u) - 0.012 * arch;
-  return topOffset * (1 - v) + bottomOffset * v;
+  const topOffset = 0.025 * (1 - u) + 0.048 * arch;
+  const bottomOffset = -0.033 * (1 - u) - 0.012 * arch;
+  const edgeRipple = (0.0011 * Math.sin(u * Math.PI * 5.4) + 0.00055 * Math.sin(u * Math.PI * 11.3))
+    * Math.pow(u, 0.8)
+    * (v < 0.5 ? 1 : -0.65);
+  return topOffset * (1 - v) + bottomOffset * v + edgeRipple;
+};
+
+const foreEdgeOffset = (u: number, v: number) => {
+  const edgeInfluence = Math.pow(smoothstep(0.66, 1, u), 2);
+  const centered = v - 0.48;
+  const broadBow = 0.0105 * (1 - 4 * centered * centered);
+  const cornerInset = -0.012 * Math.pow(Math.abs(v - 0.5) * 2, 5);
+  const handmadeVariation = 0.0022 * Math.sin(v * Math.PI * 3.2) - 0.0024 * v;
+  return edgeInfluence * (broadBow + cornerInset + handmadeVariation);
 };
 
 function createIndices(columns: number, rows: number) {
@@ -146,6 +164,8 @@ export function createPaperMesh(options: PaperMeshOptions): PaperMesh {
 
   for (let row = 0; row <= rows; row += 1) {
     const v = row / rows;
+    const cornerDistance = Math.abs(v - 0.5) * 2;
+    const cornerDroop = Math.pow(cornerDistance, 5) * (v < 0.5 ? -0.012 : 0.007);
     const baseY = (0.5 - v) * height;
     let integratedX = 0;
     let integratedZ = 0;
@@ -155,18 +175,25 @@ export function createPaperMesh(options: PaperMeshOptions): PaperMesh {
       const u = column / columns;
       const offset = positionOffset(columns, column, row);
       let x = settledSign * width * u;
+      let y = baseY
+        + openBookBoundaryOffset(u, v)
+        + cornerDroop * Math.pow(smoothstep(0.76, 1, u), 2);
       let z = settledDepth(u, v);
+
+      if (options.mode === "settled") {
+        x += settledSign * foreEdgeOffset(u, v);
+      }
 
       if (options.mode === "turning") {
         const cornerDistance = Math.abs(v - 0.5) * 2;
         const cornerAsymmetry = v < 0.5 ? 0.018 : 0.035;
         const cornerDelay = Math.pow(cornerDistance, 1.7) * (0.065 + cornerAsymmetry);
-        const propagationDelay = (1 - u) * 0.3 + cornerDelay;
+        const propagationDelay = (1 - u) * 0.48 + cornerDelay;
         const localProgress = progress === 1
           ? 1
-          : smoothstep(propagationDelay, 0.92 + cornerDelay * 0.2, progress);
+          : smoothstep(propagationDelay, 0.98 + cornerDelay * 0.15, progress);
         const curlPulse = Math.sin(Math.PI * progress) * Math.sin(Math.PI * u);
-        const tangentAngle = Math.PI * localProgress + curlPulse * 0.34 * (0.5 - progress);
+        const tangentAngle = Math.PI * localProgress + curlPulse * 0.52;
 
         if (column > 0) {
           const midAngle = (previousAngle + tangentAngle) * 0.5;
@@ -175,18 +202,22 @@ export function createPaperMesh(options: PaperMeshOptions): PaperMesh {
         }
 
         x = integratedX;
+        const movingSide = Math.cos(Math.PI * progress) >= 0 ? initialSign : -initialSign;
+        x += movingSide * foreEdgeOffset(u, v);
         z += integratedZ + Math.sin(Math.PI * u) * Math.sin(Math.PI * progress) * 0.055;
         if (options.cornerLift) {
-          z += options.cornerLift
-            * 0.035
-            * Math.sin(Math.PI * u)
-            * Math.pow(cornerDistance, 1.5);
+          const hoverFold = options.cornerLift
+            * Math.pow(smoothstep(0.58, 1, u), 2)
+            * Math.pow(smoothstep(0.5, 1, v), 2);
+          x -= movingSide * hoverFold * 0.06;
+          y += hoverFold * 0.045;
+          z += hoverFold * 0.085;
         }
         previousAngle = tangentAngle;
       }
 
       positions[offset] = x;
-      positions[offset + 1] = baseY + openBookBoundaryOffset(u, v);
+      positions[offset + 1] = y;
       positions[offset + 2] = z;
       const uvOffset = (row * (columns + 1) + column) * 2;
       uvs[uvOffset] = options.side === "left" ? 1 - u : u;
@@ -248,8 +279,13 @@ export function createProjectedShadowMesh(
     positions[offset + 2] = -0.018;
 
     const column = index % (mesh.columns + 1);
+    const row = Math.floor(index / (mesh.columns + 1));
     const edgeFade = Math.min(1, column / 2, (mesh.columns - column) / 2);
-    alphas[index] = clamp(0.12 + Math.max(vertexZ, 0) * 2.4, 0, 0.72) * pulse * edgeFade;
+    const verticalFade = Math.min(1, row / 2, (mesh.rows - row) / 2);
+    alphas[index] = clamp(0.07 + Math.max(vertexZ, 0) * 0.42, 0, 0.32)
+      * pulse
+      * edgeFade
+      * verticalFade;
   }
 
   return { positions, alphas, indices: mesh.indices.slice() };

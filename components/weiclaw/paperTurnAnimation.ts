@@ -35,7 +35,7 @@ export function animatePaperProgress(options: PaperProgressAnimationOptions): Pa
   const update = (timestamp: number) => {
     if (cancelled) return;
     const elapsed = Math.min(1, Math.max(0, (timestamp - startedAt) / options.duration));
-    const eased = 1 - Math.pow(1 - elapsed, 3);
+    const eased = 0.5 - Math.cos(Math.PI * elapsed) / 2;
     options.onUpdate(options.from + (options.to - options.from) * eased);
     if (elapsed < 1) {
       frame = options.requestFrame(update);

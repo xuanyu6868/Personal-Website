@@ -20,6 +20,13 @@ test("ships a high-resolution transparent photographic book shell", async () => 
   assert.equal(metadata.hasAlpha, true, "book shell must preserve a transparent background");
 });
 
+test("ships a high-resolution photographic fiber texture for every printed page", async () => {
+  const metadata = await readAsset("public/images/weiclaw/book/paper-fiber-v2.png");
+
+  assert.ok(metadata.width >= 1200, `expected paper texture width >= 1200px, got ${metadata.width}`);
+  assert.ok(metadata.height >= 1200, `expected paper texture height >= 1200px, got ${metadata.height}`);
+});
+
 for (const page of ["dashboard", "chat", "customer", "agent", "settings"]) {
   test(`ships a real raster ${page} page artwork`, async () => {
     const metadata = await readAsset(`public/images/weiclaw/pages/${page}.png`);

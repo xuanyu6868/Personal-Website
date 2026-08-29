@@ -32,9 +32,15 @@ export type ImageTextureCommand = TextureCommandBase & {
 export type PageTextureCommand = PaperTextureCommand | TextTextureCommand | ImageTextureCommand;
 
 const PAPER_COLOR = "#eee8da";
+const PAPER_TEXTURE_SOURCE = "/images/weiclaw/book/paper-fiber-v2.png";
 const INK_COLOR = "#3d3831";
 const MUTED_INK = "rgba(61, 56, 49, 0.64)";
 const ORANGE_INK = "#c96042";
+
+const smoothstep = (edge0: number, edge1: number, value: number) => {
+  const amount = Math.min(1, Math.max(0, (value - edge0) / Math.max(edge1 - edge0, Number.EPSILON)));
+  return amount * amount * (3 - 2 * amount);
+};
 
 export function buildPageTexturePlan(page: WeiClawBookPage, side: PageSide): PageTextureCommand[] {
   const layout = resolvePagePrintLayout(page, side);
@@ -78,9 +84,14 @@ export function applyPrintTone(source: Uint8ClampedArray): Uint8ClampedArray {
   const toned = new Uint8ClampedArray(source);
   for (let index = 0; index < toned.length; index += 4) {
     const grain = (((index * 17) % 29) - 14) * 0.16;
-    toned[index] = Math.min(255, toned[index] * 0.985 + 3.2 + grain);
-    toned[index + 1] = Math.min(255, toned[index + 1] * 0.976 + 2.4 + grain);
-    toned[index + 2] = Math.min(255, toned[index + 2] * 0.952 + 0.8 + grain);
+    const red = toned[index] * 0.985 + 3.2 + grain;
+    const green = toned[index + 1] * 0.976 + 2.4 + grain;
+    const blue = toned[index + 2] * 0.952 + 0.8 + grain;
+    const luminance = toned[index] * 0.2126 + toned[index + 1] * 0.7152 + toned[index + 2] * 0.0722;
+    const paperBlend = smoothstep(184, 252, luminance) * 0.62;
+    toned[index] = Math.min(255, red + (238 - red) * paperBlend);
+    toned[index + 1] = Math.min(255, green + (232 - green) * paperBlend);
+    toned[index + 2] = Math.min(255, blue + (218 - blue) * paperBlend);
   }
   return toned;
 }
@@ -133,14 +144,34 @@ function drawWrappedText(
   }
 }
 
-function drawPaper(context: CanvasRenderingContext2D, width: number, height: number) {
+function drawPaper(
+  context: CanvasRenderingContext2D,
+  width: number,
+  height: number,
+  paperTexture: HTMLImageElement,
+) {
   context.fillStyle = PAPER_COLOR;
   context.fillRect(0, 0, width, height);
+
+  context.save();
+  context.globalAlpha = 0.38;
+  context.globalCompositeOperation = "multiply";
+  context.drawImage(paperTexture, 0, 0, width, height);
+  context.restore();
+
   const shade = context.createRadialGradient(width * 0.52, height * 0.36, width * 0.12, width * 0.5, height * 0.45, width * 0.78);
-  shade.addColorStop(0, "rgba(255, 252, 244, 0.16)");
-  shade.addColorStop(0.72, "rgba(226, 216, 198, 0.04)");
-  shade.addColorStop(1, "rgba(109, 84, 58, 0.11)");
+  shade.addColorStop(0, "rgba(255, 252, 244, 0.12)");
+  shade.addColorStop(0.7, "rgba(226, 216, 198, 0.035)");
+  shade.addColorStop(1, "rgba(109, 84, 58, 0.075)");
   context.fillStyle = shade;
+  context.fillRect(0, 0, width, height);
+
+  const edgeTone = context.createLinearGradient(0, 0, width, 0);
+  edgeTone.addColorStop(0, "rgba(88, 66, 43, 0.035)");
+  edgeTone.addColorStop(0.12, "rgba(255, 250, 238, 0.015)");
+  edgeTone.addColorStop(0.78, "rgba(255, 250, 238, 0.01)");
+  edgeTone.addColorStop(1, "rgba(88, 66, 43, 0.045)");
+  context.fillStyle = edgeTone;
   context.fillRect(0, 0, width, height);
 }
 
@@ -153,16 +184,51 @@ function drawImageCommand(
 ) {
   const source = sourceRectangle(command.crop, image);
   const destination = inPixels(command.destination, width, height);
-  context.save();
-  context.translate(destination.x + destination.width / 2, destination.y + destination.height / 2);
-  context.rotate(command.rotation);
-  context.globalAlpha = 0.94;
-  context.drawImage(
+  const layer = document.createElement("canvas");
+  layer.width = Math.max(1, Math.round(destination.width));
+  layer.height = Math.max(1, Math.round(destination.height));
+  const layerContext = layer.getContext("2d", { alpha: true });
+  if (!layerContext) throw new Error("Unable to create WeiClaw printed image layer");
+
+  layerContext.drawImage(
     image,
     source.x,
     source.y,
     source.width,
     source.height,
+    0,
+    0,
+    layer.width,
+    layer.height,
+  );
+  layerContext.globalCompositeOperation = "destination-in";
+  const horizontalMask = layerContext.createLinearGradient(0, 0, layer.width, 0);
+  horizontalMask.addColorStop(0, "rgba(0,0,0,0.5)");
+  horizontalMask.addColorStop(0.025, "rgba(0,0,0,0.96)");
+  horizontalMask.addColorStop(0.965, "rgba(0,0,0,0.96)");
+  horizontalMask.addColorStop(1, "rgba(0,0,0,0.48)");
+  layerContext.fillStyle = horizontalMask;
+  layerContext.fillRect(0, 0, layer.width, layer.height);
+
+  const verticalMask = layerContext.createLinearGradient(0, 0, 0, layer.height);
+  verticalMask.addColorStop(0, "rgba(0,0,0,0.76)");
+  verticalMask.addColorStop(0.035, "rgba(0,0,0,1)");
+  verticalMask.addColorStop(0.96, "rgba(0,0,0,1)");
+  verticalMask.addColorStop(1, "rgba(0,0,0,0.68)");
+  layerContext.fillStyle = verticalMask;
+  layerContext.fillRect(0, 0, layer.width, layer.height);
+
+  context.save();
+  context.translate(destination.x + destination.width / 2, destination.y + destination.height / 2);
+  context.rotate(command.rotation);
+  context.globalAlpha = 0.93;
+  context.globalCompositeOperation = "multiply";
+  context.drawImage(
+    layer,
+    0,
+    0,
+    layer.width,
+    layer.height,
     -destination.width / 2,
     -destination.height / 2,
     destination.width,
@@ -241,7 +307,10 @@ export async function createPageTexture(
   context.scale(pixelRatio, pixelRatio);
 
   const plan = buildPageTexturePlan(page, side);
-  const imageSources = [...new Set(plan.filter((command): command is ImageTextureCommand => command.kind === "image").map((command) => command.source))];
+  const imageSources = [...new Set([
+    PAPER_TEXTURE_SOURCE,
+    ...plan.filter((command): command is ImageTextureCommand => command.kind === "image").map((command) => command.source),
+  ])];
   const [, images] = await Promise.all([
     document.fonts.ready,
     Promise.all(imageSources.map(async (source) => [source, await loadPageImage(source)] as const)),
@@ -250,7 +319,9 @@ export async function createPageTexture(
 
   for (const command of plan) {
     if (command.kind === "paper") {
-      drawPaper(context, width, height);
+      const paperTexture = imageMap.get(PAPER_TEXTURE_SOURCE);
+      if (!paperTexture) throw new Error(`Unable to load WeiClaw paper texture: ${PAPER_TEXTURE_SOURCE}`);
+      drawPaper(context, width, height, paperTexture);
     } else if (command.kind === "image") {
       const image = imageMap.get(command.source);
       if (!image) throw new Error(`Unable to load WeiClaw page image: ${command.source}`);

@@ -35,7 +35,7 @@ export const weiclawBookPages: WeiClawBookPage[] = [
     image: "/images/weiclaw/pages/dashboard.png",
     note: "全局数据概览 / 一目了然",
     layout: "dashboard-bleed",
-    imageCrop: { x: 0, y: 0.04, width: 1, height: 0.92 },
+    imageCrop: { x: 0.05, y: 0.06, width: 0.92, height: 0.82 },
   },
   {
     id: "chat",
@@ -57,7 +57,8 @@ export const weiclawBookPages: WeiClawBookPage[] = [
     image: "/images/weiclaw/pages/customer.png",
     note: "关系、标签与上下文被保留在同一处",
     layout: "customer-dominant",
-    imageCrop: { x: 0, y: 0.06, width: 1, height: 0.88 },
+    imageCrop: { x: 0.13, y: 0.04, width: 0.48, height: 0.86 },
+    detailCrop: { x: 0.52, y: 0.26, width: 0.43, height: 0.44 },
   },
   {
     id: "agent",
@@ -68,8 +69,8 @@ export const weiclawBookPages: WeiClawBookPage[] = [
     image: "/images/weiclaw/pages/agent.png",
     note: "AI 不是一个聊天窗口，而是一位可托管的员工",
     layout: "agent-details",
-    imageCrop: { x: 0.02, y: 0.02, width: 0.96, height: 0.96 },
-    detailCrop: { x: 0.48, y: 0.08, width: 0.42, height: 0.48 },
+    imageCrop: { x: 0.14, y: 0.17, width: 0.36, height: 0.5 },
+    detailCrop: { x: 0.46, y: 0.16, width: 0.48, height: 0.38 },
   },
   {
     id: "settings",
