@@ -36,6 +36,9 @@ const PAPER_TEXTURE_SOURCE = "/images/weiclaw/book/paper-fiber-v2.png";
 const INK_COLOR = "#3d3831";
 const MUTED_INK = "rgba(61, 56, 49, 0.64)";
 const ORANGE_INK = "#c96042";
+export const PAGE_TEXTURE_WIDTH = 1536;
+export const PAGE_TEXTURE_HEIGHT = 1980;
+const pageImageCache = new Map<string, Promise<HTMLImageElement>>();
 
 const smoothstep = (edge0: number, edge1: number, value: number) => {
   const amount = Math.min(1, Math.max(0, (value - edge0) / Math.max(edge1 - edge0, Number.EPSILON)));
@@ -83,12 +86,12 @@ export function buildPageTexturePlan(page: WeiClawBookPage, side: PageSide): Pag
 export function applyPrintTone(source: Uint8ClampedArray): Uint8ClampedArray {
   const toned = new Uint8ClampedArray(source);
   for (let index = 0; index < toned.length; index += 4) {
-    const grain = (((index * 17) % 29) - 14) * 0.16;
-    const red = toned[index] * 0.985 + 3.2 + grain;
-    const green = toned[index + 1] * 0.976 + 2.4 + grain;
-    const blue = toned[index + 2] * 0.952 + 0.8 + grain;
+    const grain = (((index * 17) % 29) - 14) * 0.055;
+    const red = toned[index] + grain;
+    const green = toned[index + 1] + grain;
+    const blue = toned[index + 2] + grain;
     const luminance = toned[index] * 0.2126 + toned[index + 1] * 0.7152 + toned[index + 2] * 0.0722;
-    const paperBlend = smoothstep(184, 252, luminance) * 0.62;
+    const paperBlend = smoothstep(218, 252, luminance) * 0.76;
     toned[index] = Math.min(255, red + (238 - red) * paperBlend);
     toned[index + 1] = Math.min(255, green + (232 - green) * paperBlend);
     toned[index + 2] = Math.min(255, blue + (218 - blue) * paperBlend);
@@ -97,11 +100,22 @@ export function applyPrintTone(source: Uint8ClampedArray): Uint8ClampedArray {
 }
 
 export async function loadPageImage(source: string): Promise<HTMLImageElement> {
-  const image = new Image();
-  image.decoding = "async";
-  image.src = source;
-  await image.decode();
-  return image;
+  const cached = pageImageCache.get(source);
+  if (cached) return cached;
+  const promise = (async () => {
+    const image = new Image();
+    image.decoding = "async";
+    image.src = source;
+    await image.decode();
+    return image;
+  })();
+  pageImageCache.set(source, promise);
+  try {
+    return await promise;
+  } catch (error) {
+    pageImageCache.delete(source);
+    throw error;
+  }
 }
 
 const inPixels = (rectangle: NormalizedRect, width: number, height: number) => ({
@@ -190,6 +204,7 @@ function drawImageCommand(
   const layerContext = layer.getContext("2d", { alpha: true });
   if (!layerContext) throw new Error("Unable to create WeiClaw printed image layer");
 
+  layerContext.filter = "contrast(1.26) saturate(0.92) brightness(0.985)";
   layerContext.drawImage(
     image,
     source.x,
@@ -201,28 +216,32 @@ function drawImageCommand(
     layer.width,
     layer.height,
   );
+  layerContext.filter = "none";
+  const printedPixels = layerContext.getImageData(0, 0, layer.width, layer.height);
+  printedPixels.data.set(applyPrintTone(printedPixels.data));
+  layerContext.putImageData(printedPixels, 0, 0);
   layerContext.globalCompositeOperation = "destination-in";
   const horizontalMask = layerContext.createLinearGradient(0, 0, layer.width, 0);
-  horizontalMask.addColorStop(0, "rgba(0,0,0,0.5)");
-  horizontalMask.addColorStop(0.025, "rgba(0,0,0,0.96)");
-  horizontalMask.addColorStop(0.965, "rgba(0,0,0,0.96)");
-  horizontalMask.addColorStop(1, "rgba(0,0,0,0.48)");
+  horizontalMask.addColorStop(0, "rgba(0,0,0,0.9)");
+  horizontalMask.addColorStop(0.018, "rgba(0,0,0,1)");
+  horizontalMask.addColorStop(0.982, "rgba(0,0,0,1)");
+  horizontalMask.addColorStop(1, "rgba(0,0,0,0.9)");
   layerContext.fillStyle = horizontalMask;
   layerContext.fillRect(0, 0, layer.width, layer.height);
 
   const verticalMask = layerContext.createLinearGradient(0, 0, 0, layer.height);
-  verticalMask.addColorStop(0, "rgba(0,0,0,0.76)");
-  verticalMask.addColorStop(0.035, "rgba(0,0,0,1)");
-  verticalMask.addColorStop(0.96, "rgba(0,0,0,1)");
-  verticalMask.addColorStop(1, "rgba(0,0,0,0.68)");
+  verticalMask.addColorStop(0, "rgba(0,0,0,0.94)");
+  verticalMask.addColorStop(0.02, "rgba(0,0,0,1)");
+  verticalMask.addColorStop(0.98, "rgba(0,0,0,1)");
+  verticalMask.addColorStop(1, "rgba(0,0,0,0.92)");
   layerContext.fillStyle = verticalMask;
   layerContext.fillRect(0, 0, layer.width, layer.height);
 
   context.save();
   context.translate(destination.x + destination.width / 2, destination.y + destination.height / 2);
   context.rotate(command.rotation);
-  context.globalAlpha = 0.93;
-  context.globalCompositeOperation = "multiply";
+  context.globalAlpha = 1;
+  context.globalCompositeOperation = "source-over";
   context.drawImage(
     layer,
     0,
@@ -296,8 +315,8 @@ export async function createPageTexture(
   side: PageSide,
   options: PageTextureOptions = {},
 ): Promise<HTMLCanvasElement> {
-  const width = options.width ?? 1024;
-  const height = options.height ?? 1320;
+  const width = options.width ?? PAGE_TEXTURE_WIDTH;
+  const height = options.height ?? PAGE_TEXTURE_HEIGHT;
   const pixelRatio = Math.min(options.pixelRatio ?? window.devicePixelRatio ?? 1, 2);
   const canvas = document.createElement("canvas");
   canvas.width = Math.round(width * pixelRatio);
@@ -331,8 +350,5 @@ export async function createPageTexture(
     }
   }
 
-  const pixels = context.getImageData(0, 0, canvas.width, canvas.height);
-  pixels.data.set(applyPrintTone(pixels.data));
-  context.putImageData(pixels, 0, 0);
   return canvas;
 }

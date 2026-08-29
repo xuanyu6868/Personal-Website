@@ -25,17 +25,17 @@ const layouts: Record<WeiClawBookPage["layout"], PagePrintLayout> = {
   },
   "customer-dominant": {
     header: { x: 0.11, y: 0.07, width: 0.52, height: 0.22 },
-    image: { x: 0.03, y: 0.31, width: 0.61, height: 0.63 },
+    image: { x: 0.06, y: 0.34, width: 0.4, height: 0.59 },
     note: { x: 0.66, y: 0.09, width: 0.24, height: 0.16 },
-    detailImages: [{ x: 0.53, y: 0.49, width: 0.42, height: 0.36 }],
-    imageRotation: -0.009,
+    detailImages: [{ x: 0.4, y: 0.39, width: 0.56, height: 0.5 }],
+    imageRotation: -0.006,
   },
   "agent-details": {
     header: { x: 0.1, y: 0.07, width: 0.5, height: 0.23 },
-    image: { x: 0.07, y: 0.4, width: 0.46, height: 0.48 },
+    image: { x: 0.06, y: 0.4, width: 0.4, height: 0.45 },
     note: { x: 0.66, y: 0.08, width: 0.25, height: 0.18 },
-    detailImages: [{ x: 0.57, y: 0.33, width: 0.39, height: 0.31 }],
-    imageRotation: 0.008,
+    detailImages: [{ x: 0.28, y: 0.49, width: 0.68, height: 0.4 }],
+    imageRotation: 0.005,
   },
   "settings-wide": {
     header: { x: 0.1, y: 0.08, width: 0.5, height: 0.23 },

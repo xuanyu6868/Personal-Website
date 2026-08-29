@@ -33,6 +33,7 @@ type PaperLocations = {
   texture: WebGLUniformLocation | null;
   lightDirection: WebGLUniformLocation | null;
   spineDarkening: WebGLUniformLocation | null;
+  settled: WebGLUniformLocation | null;
   backFace: WebGLUniformLocation | null;
 };
 
@@ -68,16 +69,17 @@ const paperFragmentShader = `
   uniform sampler2D uPageTexture;
   uniform vec3 uLightDirection;
   uniform float uSpineDarkening;
+  uniform float uSettled;
   uniform float uBackFace;
   void main() {
     vec3 normal = normalize(vNormal) * (uBackFace > 0.5 ? -1.0 : 1.0);
     float diffuse = 0.72 + max(dot(normal, normalize(uLightDirection)), 0.0) * 0.34;
-    float spineShade = 1.0 - uSpineDarkening * exp(-abs(vWorldPosition.x) * 6.4);
+    float spineShade = 1.0 - uSpineDarkening * exp(-pow(abs(vWorldPosition.x) / 0.19, 2.0));
     float crest = pow(max(dot(normal, normalize(vec3(-0.31, 0.33, 1.0))), 0.0), 8.0) * 0.038;
     float pageDistance = abs(vWorldPosition.x);
-    float innerLift = 0.052 * exp(-pow((pageDistance - 0.16) / 0.115, 2.0));
-    float middleSettle = 0.034 * exp(-pow((pageDistance - 0.57) / 0.27, 2.0));
-    float outerLift = 0.022 * smoothstep(0.7, 1.02, pageDistance);
+    float innerLift = mix(0.052, 0.014, uSettled) * exp(-pow((pageDistance - 0.18) / 0.15, 2.0));
+    float middleSettle = mix(0.034, 0.005, uSettled) * exp(-pow((pageDistance - 0.57) / 0.32, 2.0));
+    float outerLift = mix(0.022, 0.003, uSettled) * smoothstep(0.78, 1.02, pageDistance);
     float foldLighting = 1.0 + innerLift - middleSettle + outerLift;
     vec2 paperUv = vec2(uBackFace > 0.5 ? 1.0 - vUv.x : vUv.x, vUv.y);
     vec4 paper = texture2D(uPageTexture, paperUv);
@@ -255,6 +257,7 @@ export class WeiClawPaperRenderer {
       texture: gl.getUniformLocation(this.paperProgram, "uPageTexture"),
       lightDirection: gl.getUniformLocation(this.paperProgram, "uLightDirection"),
       spineDarkening: gl.getUniformLocation(this.paperProgram, "uSpineDarkening"),
+      settled: gl.getUniformLocation(this.paperProgram, "uSettled"),
       backFace: gl.getUniformLocation(this.paperProgram, "uBackFace"),
     };
     this.solidLocations = {
@@ -375,7 +378,8 @@ export class WeiClawPaperRenderer {
     gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, mesh.indices, gl.DYNAMIC_DRAW);
     gl.uniformMatrix4fv(this.paperLocations.matrix, false, this.matrix);
     gl.uniform3f(this.paperLocations.lightDirection, -0.62, 0.22, 1);
-    gl.uniform1f(this.paperLocations.spineDarkening, face === "settled" ? 0.08 : 0.125);
+    gl.uniform1f(this.paperLocations.spineDarkening, face === "settled" ? 0.07 : 0.125);
+    gl.uniform1f(this.paperLocations.settled, face === "settled" ? 1 : 0);
     gl.uniform1f(this.paperLocations.backFace, face === "back" ? 1 : 0);
     gl.activeTexture(gl.TEXTURE0);
     gl.bindTexture(gl.TEXTURE_2D, this.getTexture(canvas));

@@ -79,20 +79,20 @@ const gaussian = (value: number, center: number, radius: number) =>
   Math.exp(-Math.pow((value - center) / radius, 2));
 
 const settledDepth = (u: number, v: number) => {
-  const spineDip = -0.04 * gaussian(u, 0, 0.088);
-  const innerCrest = 0.068 * gaussian(u, 0.16, 0.12);
-  const middleFall = -0.018 * gaussian(u, 0.57, 0.26);
-  const outerLift = 0.038 * Math.pow(smoothstep(0.64, 1, u), 1.6);
-  const verticalBow = 0.008 * (1 - Math.pow((v - 0.48) * 2, 2));
-  const pageTwist = 0.0045 * Math.sin(Math.PI * v) * (u - 0.42);
+  const spineDip = -0.022 * gaussian(u, 0, 0.145);
+  const innerCrest = 0.021 * gaussian(u, 0.2, 0.16);
+  const middleFall = -0.0035 * gaussian(u, 0.56, 0.34);
+  const outerLift = 0.008 * Math.pow(smoothstep(0.78, 1, u), 1.8);
+  const verticalBow = 0.0025 * (1 - Math.pow((v - 0.49) * 2, 2));
+  const pageTwist = 0.001 * Math.sin(Math.PI * v) * (u - 0.42);
   return spineDip + innerCrest + middleFall + outerLift + verticalBow + pageTwist;
 };
 
 const openBookBoundaryOffset = (u: number, v: number) => {
   const arch = Math.sin(Math.PI * u);
-  const topOffset = 0.025 * (1 - u) + 0.048 * arch;
-  const bottomOffset = -0.033 * (1 - u) - 0.012 * arch;
-  const edgeRipple = (0.0011 * Math.sin(u * Math.PI * 5.4) + 0.00055 * Math.sin(u * Math.PI * 11.3))
+  const topOffset = 0.016 * (1 - u) + 0.017 * arch;
+  const bottomOffset = -0.014 * (1 - u) - 0.004 * arch;
+  const edgeRipple = (0.00022 * Math.sin(u * Math.PI * 5.4) + 0.00012 * Math.sin(u * Math.PI * 11.3))
     * Math.pow(u, 0.8)
     * (v < 0.5 ? 1 : -0.65);
   return topOffset * (1 - v) + bottomOffset * v + edgeRipple;
@@ -101,9 +101,9 @@ const openBookBoundaryOffset = (u: number, v: number) => {
 const foreEdgeOffset = (u: number, v: number) => {
   const edgeInfluence = Math.pow(smoothstep(0.66, 1, u), 2);
   const centered = v - 0.48;
-  const broadBow = 0.0105 * (1 - 4 * centered * centered);
-  const cornerInset = -0.012 * Math.pow(Math.abs(v - 0.5) * 2, 5);
-  const handmadeVariation = 0.0022 * Math.sin(v * Math.PI * 3.2) - 0.0024 * v;
+  const broadBow = 0.0022 * (1 - 4 * centered * centered);
+  const cornerInset = -0.0026 * Math.pow(Math.abs(v - 0.5) * 2, 5);
+  const handmadeVariation = 0.00048 * Math.sin(v * Math.PI * 3.2) - 0.00042 * v;
   return edgeInfluence * (broadBow + cornerInset + handmadeVariation);
 };
 
@@ -165,7 +165,7 @@ export function createPaperMesh(options: PaperMeshOptions): PaperMesh {
   for (let row = 0; row <= rows; row += 1) {
     const v = row / rows;
     const cornerDistance = Math.abs(v - 0.5) * 2;
-    const cornerDroop = Math.pow(cornerDistance, 5) * (v < 0.5 ? -0.012 : 0.007);
+    const cornerDroop = Math.pow(cornerDistance, 5) * (v < 0.5 ? -0.0035 : 0.0025);
     const baseY = (0.5 - v) * height;
     let integratedX = 0;
     let integratedZ = 0;

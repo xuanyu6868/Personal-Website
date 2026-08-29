@@ -4,6 +4,7 @@ import test from "node:test";
 import {
   applyPrintTone,
   buildPageTexturePlan,
+  createPageTexture,
 } from "../components/weiclaw/createPageTexture.ts";
 import { resolvePagePrintLayout } from "../components/weiclaw/pageTextureLayout.ts";
 import { weiclawBookPages } from "../data/weiclaw-book.ts";
@@ -76,10 +77,11 @@ test("prints an agent detail crop from the same real screenshot", () => {
 
   assert.equal(images.length, 2);
   assert.ok(images.every((image) => image.source === "/images/weiclaw/pages/agent.png"));
-  assert.deepEqual(images[0].crop, { x: 0.14, y: 0.17, width: 0.36, height: 0.5 });
-  assert.deepEqual(images[1].crop, { x: 0.46, y: 0.16, width: 0.48, height: 0.38 });
+  assert.deepEqual(images[0].crop, { x: 0.16, y: 0.22, width: 0.27, height: 0.35 });
+  assert.deepEqual(images[1].crop, { x: 0.43, y: 0.22, width: 0.37, height: 0.35 });
   assert.ok(images[0].destination.width < 0.5, "agent overview should read as a focused printed fragment");
-  assert.ok(images[1].destination.x > images[0].destination.x + images[0].destination.width);
+  assert.ok(images[0].destination.height >= 0.43, "AI status should be enlarged enough to read");
+  assert.ok(images[1].destination.width >= 0.68, "workflow should be the dominant editorial crop");
 });
 
 test("splits customer management into an asymmetric editorial pair", () => {
@@ -87,8 +89,11 @@ test("splits customer management into an asymmetric editorial pair", () => {
   const images = buildPageTexturePlan(page, "left").filter((command) => command.kind === "image");
 
   assert.equal(images.length, 2);
-  assert.ok(images[0].destination.width <= 0.64);
-  assert.ok(images[1].destination.x >= 0.5);
+  assert.deepEqual(images[0].crop, { x: 0.13, y: 0.08, width: 0.2, height: 0.84 });
+  assert.deepEqual(images[1].crop, { x: 0.35, y: 0.22, width: 0.3, height: 0.64 });
+  assert.ok(images[0].destination.width <= 0.42, "customer list should read as a deliberate column crop");
+  assert.ok(images[1].destination.x >= 0.4, "customer detail should be separated from the list crop");
+  assert.ok(images[1].destination.width >= 0.54, "customer detail should be enlarged rather than showing a tiny dashboard overview");
   assert.notEqual(images[0].destination.y, images[1].destination.y);
 });
 
@@ -110,6 +115,62 @@ test("pulls near-white interface pixels into the warm paper range", () => {
   assert.ok(toned[1] <= 239, `green channel stayed too digital: ${toned[1]}`);
   assert.ok(toned[2] <= 229, `blue channel stayed too digital: ${toned[2]}`);
   assert.ok(toned[0] > toned[2] + 8, "paper whites should retain a warm printed cast");
+});
+
+test("preserves printed black and midtone detail while tinting only light UI surfaces", () => {
+  const dark = [20, 24, 28, 255];
+  const midtone = [128, 140, 160, 255];
+  const tonedDark = Array.from(applyPrintTone(new Uint8ClampedArray(dark)));
+  const tonedMidtone = Array.from(applyPrintTone(new Uint8ClampedArray(midtone)));
+
+  assert.ok(tonedDark.slice(0, 3).every((channel, index) => Math.abs(channel - dark[index]) <= 3), "black UI details should remain solid");
+  assert.ok(tonedMidtone.slice(0, 3).every((channel, index) => Math.abs(channel - midtone[index]) <= 4), "midtone borders and labels should remain readable");
+});
+
+test("renders default page textures at a print-safe raster resolution", async () => {
+  const previousDocument = globalThis.document;
+  const previousImage = globalThis.Image;
+  const gradient = { addColorStop() {} };
+  const sampledCanvases = [];
+  let imageCreations = 0;
+  const makeCanvas = () => {
+    const canvas = { width: 0, height: 0 };
+    const context = {
+      scale() {}, save() {}, restore() {}, fillRect() {}, drawImage() {}, translate() {}, rotate() {}, fillText() {}, putImageData() {},
+      measureText(text) { return { width: text.length * 12 }; },
+      createRadialGradient() { return gradient; },
+      createLinearGradient() { return gradient; },
+      getImageData() {
+        sampledCanvases.push([canvas.width, canvas.height]);
+        return { data: new Uint8ClampedArray(canvas.width * canvas.height * 4) };
+      },
+    };
+    canvas.getContext = () => context;
+    return canvas;
+  };
+  class FakeImage {
+    constructor() { imageCreations += 1; }
+    naturalWidth = 1586;
+    naturalHeight = 992;
+    async decode() {}
+  }
+
+  globalThis.document = { fonts: { ready: Promise.resolve() }, createElement: () => makeCanvas() };
+  globalThis.Image = FakeImage;
+  try {
+    const canvas = await createPageTexture(weiclawBookPages[0], "left", { pixelRatio: 1 });
+    await createPageTexture(weiclawBookPages[0], "right", { pixelRatio: 1 });
+    assert.ok(canvas.width >= 1536, `page texture width is only ${canvas.width}px`);
+    assert.ok(canvas.height >= 1980, `page texture height is only ${canvas.height}px`);
+    assert.equal(imageCreations, 2, "paper and artwork images should be decoded once and reused across page sides");
+    assert.ok(
+      sampledCanvases.every(([width, height]) => width < canvas.width || height < canvas.height),
+      "print-tone processing should sample artwork layers, not the entire high-resolution page",
+    );
+  } finally {
+    globalThis.document = previousDocument;
+    globalThis.Image = previousImage;
+  }
 });
 
 test("gives the chat artwork an intentional editorial inset", () => {

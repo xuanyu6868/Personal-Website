@@ -3,7 +3,11 @@
 import { useEffect, useRef } from "react";
 
 import type { WeiClawBookPage } from "../../data/weiclaw-book";
-import { createPageTexture } from "./createPageTexture";
+import {
+  createPageTexture,
+  PAGE_TEXTURE_HEIGHT,
+  PAGE_TEXTURE_WIDTH,
+} from "./createPageTexture";
 import { createPaperRenderScheduler, type PaperRenderScheduler } from "./paperRenderScheduler";
 import { createPaperTextureRequests } from "./paperTextureRequests";
 import {
@@ -28,8 +32,8 @@ export type WeiClawPaperMeshProps = {
 
 function createBlankPageTexture() {
   const canvas = document.createElement("canvas");
-  canvas.width = 1024;
-  canvas.height = 1320;
+  canvas.width = PAGE_TEXTURE_WIDTH;
+  canvas.height = PAGE_TEXTURE_HEIGHT;
   const context = canvas.getContext("2d");
   if (!context) throw new Error("Unable to create blank WeiClaw page texture");
   context.fillStyle = "#eee8da";
@@ -179,7 +183,7 @@ export default function WeiClawPaperMesh(props: WeiClawPaperMeshProps) {
       const cached = textureCacheRef.current.get(key);
       if (cached) return cached;
       const promise = page
-        ? createPageTexture(page, side, { width: 1024, height: 1320, pixelRatio: 1 })
+        ? createPageTexture(page, side, { pixelRatio: 1 })
         : Promise.resolve(createBlankPageTexture());
       textureCacheRef.current.set(key, promise);
       return promise;

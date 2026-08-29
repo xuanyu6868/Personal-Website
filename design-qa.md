@@ -1,65 +1,64 @@
-# Design QA — WeiClaw Paper Material and Page Curl v2
+# Design QA — WeiClaw Settled Paper Rigidity and Print Clarity v3
 
 ## Comparison target
 
 - Source visual truth: `/var/folders/9j/_8nq6sh97tbf3k2rgt35gg7c0000gn/T/codex-clipboard-9283f247-4574-430b-8317-8b0f4440584b.png`
-- Settled implementation screenshot: `/Users/xuanyumacbook/Personal-Website/design-qa-weiclaw-paper-v2-final-1536x1024.png`
-- Mid-turn implementation screenshot: `/Users/xuanyumacbook/Personal-Website/design-qa-weiclaw-paper-v2-final-turn.png`
+- Settled implementation screenshot: `/Users/xuanyumacbook/Personal-Website/design-qa-weiclaw-rigidity-after-01-final.png`
+- Editorial crop implementation screenshot: `/Users/xuanyumacbook/Personal-Website/design-qa-weiclaw-rigidity-after-03-final.png`
 - Route: `http://127.0.0.1:4173/?audit=verified#project-weiclaw`
 - Viewport: 1536 × 1024 CSS px
 - Source and implementation pixels: 1536 × 1024 each
 - Device scale factor: 1; no density normalization required
 - Settled state: WeiClaw spread `01 / 05`, pointer outside the book, no hover curl
-- Interaction state: forward click turn at approximately 190 ms, while the sheet is crossing the gutter
+- Secondary settled state: WeiClaw spread `03 / 05`, showing the customer-management and AI-agent crop system
 
 ## Evidence
 
-- Full-view settled comparison: `/Users/xuanyumacbook/Personal-Website/design-qa-weiclaw-paper-v2-final-comparison.png`
-- Focused interaction comparison: `/Users/xuanyumacbook/Personal-Website/design-qa-weiclaw-paper-v2-turn-comparison.png`
-- A separate crop was not needed because the 1536 × 1024 full-view capture keeps the book, page edges, spine, printed screenshots, and turn silhouette large enough to judge. The dedicated mid-turn comparison supplies the additional close interaction state.
+- Full-view source/implementation comparison: `/Users/xuanyumacbook/Personal-Website/design-qa-weiclaw-rigidity-reference-comparison.png`
+- Previous/current implementation comparison: `/Users/xuanyumacbook/Personal-Website/design-qa-weiclaw-rigidity-before-after-comparison.png`
+- Focused `03 / 05` print and crop evidence: `/Users/xuanyumacbook/Personal-Website/design-qa-weiclaw-rigidity-after-03-final-crop.png`
 
 ## Findings
 
-- No actionable P0/P1/P2 visual or interaction differences remain at the target viewport.
-- [P3] The reference has thicker photographed page stacks along the top and outer edges; the implementation relies on the WebGL page silhouette plus the existing CSS shell, so the top stack is intentionally subtler.
-- [P3] Product screenshots are slightly lighter than the reference after the print-tone pass. This keeps them integrated with the warm paper instead of reading as emissive UI panels.
-- [P3] Handwritten notes are smaller and more restrained than the reference. Their hierarchy remains secondary to the project screens and page titles.
-- [P3] The reference shows a dramatic lifted sheet in its static state. The implementation deliberately keeps the settled spread normal and reveals the full C-shaped curl only during interaction, following the user's later correction.
+- No actionable P0/P1/P2 visual or interaction differences remain for this correction scope.
+- [P3] The reference shell and page stack are photographic and therefore retain slightly richer edge micro-detail than the live top leaves.
+- [P3] The reference uses a different mountain-video frame; composition, scale, spread position, and contrast were judged independently of that frame difference.
+- [P3] The reference shows a dramatic lifted sheet in its static state. The settled implementation deliberately keeps stiff leaves and reserves the C-shaped curl for interaction, following the user's latest direction.
 
 ## Required fidelity surfaces
 
 - Fonts and typography: editorial serif titles, condensed page labels, Chinese project copy, and handwritten annotations retain the intended hierarchy, optical contrast, wrapping, and restrained spacing.
 - Spacing and layout rhythm: left project copy, right-shifted book, visible mountain background, centered gutter, book scale, and bottom status align with the reference composition at 1536 × 1024.
-- Colors and visual tokens: warm ivory paper, charcoal ink, blue rules, dark cover, broad soft gutter shading, and non-glowing contact shadows form one material system.
-- Image quality and asset fidelity: product screens are composited into page textures with edge feathering, multiply blending, paper grain, curvature lighting, and shared shadowing. The generated 1254 × 1254 archival-paper texture is high enough resolution for the displayed page size.
-- Copy and content: the first spread preserves `01 DASHBOARD`, `02 CHAT`, 数据总览, 企业微信真实聊天, and `01 / 05`; later spreads retain customer, AI employee, and automation content with asymmetric editorial crops.
+- Colors and visual tokens: warm ivory paper, preserved charcoal/black UI detail, blue rules, dark cover, broad soft gutter shading, and non-glowing contact shadows form one material system.
+- Image quality and asset fidelity: every page texture renders at 1536 × 1980, caches decoded artwork, applies paper tint only to near-white UI surfaces, and keeps text, chart lines, borders, and black values intact under shared grain and curvature lighting.
+- Copy and content: the first spread preserves `01 DASHBOARD`, `02 CHAT`, 数据总览, 企业微信真实聊天, and `01 / 05`; `03 / 05` uses an intentional customer list/detail crop and an enlarged AI status/workflow crop rather than a faded full-dashboard panel.
 
 ## Comparison history
 
-1. Earlier pass had P2 flatness: page centers behaved like two planar design boards, the gutter read as a narrow black seam, screenshots had crisp rectangular boundaries, and the top rear page looked like a single cut-paper silhouette.
-2. Fix: rebuilt the settled mesh profile as spine dip → inner crest → middle fall → outer lift; added vertical bow, edge ripple, corner insets, broader low-opacity spine AO, softer top/bottom contours, and a bounded feathered cast shadow.
-3. Earlier pass had P2 material separation: paper was warm and textured while product screenshots remained bright, clean digital rectangles.
-4. Fix: generated a real archival-paper texture, baked it into every page texture, applied warm print-tone remapping, multiply compositing, edge feathering, and page-wide curvature lighting so screenshots inherit the paper's light and grain.
-5. Earlier pass had P2 turn behavior: the click animation accelerated too quickly and read as a rigid sheet rotation; the moving shadow exposed polygon blocks.
-6. Fix: changed completion timing to cosine ease-in-out, strengthened delayed curl propagation and corner lag, preserved a late-turn C curve, and vertically feathered/capped the moving cast shadow.
-7. Post-fix evidence: the settled comparison shows continuous page curvature and a soft gutter; the mid-turn comparison shows a content-bearing C-shaped sheet, visible back face, next-page reveal, and moving shadow without hard blocks.
+1. Prior v2 had P2 over-deformation: settled pages carried large body and bottom-edge waves that read as cloth rather than stiff book paper.
+2. Fix: reduced settled depth outside the gutter, concentrated curvature into a broad continuous valley, reduced edge ripple and corner droop, and retained only a tiny outer lift. Automated geometry limits now keep the full settled depth range below `0.055` and the body range below `0.018`.
+3. Prior v2 had P2 washed printing: the print treatment reduced the whole screenshot's contrast and made the AI-agent page approach a translucent background.
+4. Fix: switched to source-over artwork, preserved dark/midtone pixels, tinted near-white UI surfaces only, raised print contrast, and applied subtle shared grain without a full-page opacity reduction.
+5. Prior v2 had P2 generic framing: customer and AI pages still resembled full screenshots placed into a repeated template.
+6. Fix: `03` now pairs a deliberate customer-list crop with an overlapping detail region; `04` isolates the agent status ring and enlarges the audited workflow core.
+7. High-resolution texture generation initially added avoidable transition latency. Fix: cached decoded images and restricted pixel sampling to artwork layers instead of processing the complete 1536 × 1980 page.
+8. Post-fix evidence: the settled comparison shows a firm page body, wide soft gutter, readable print blacks, clear top-leaf/page-stack separation, and focused asymmetric editorial crops.
 
 ## Primary interactions tested
 
 - Hovering the lower-right page edge lifts the fore-corner without changing spreads.
-- Clicking next produces a gradual C-shaped turn and completes `01 / 05` → `03 / 05`.
-- Previous returns to `01 / 05` and leaves the book in a stable settled state.
-- The `03 / 05` spread uses asymmetric customer/agent image fragments instead of duplicating the first template.
-- The final page preserves the intentional blank opposite leaf.
-- Browser console warnings/errors during the final interaction pass: none.
+- Next/previous transitions complete `01 / 05` → `03 / 05` → `01 / 05` and restore the stiff settled mesh.
+- Turning-geometry regression tests cover `p = 0.2 / 0.5 / 0.8`; their dynamic depth ranges remain substantially larger than the settled limits, preserving the C-shaped sheet only while turning.
+- The `03 / 05` spread uses asymmetric customer and AI workflow fragments instead of duplicating the first template.
+- Browser console warnings/errors during the final visual pass: none.
 
 ## Verification
 
-- WeiClaw regression suite: 57/57 tests passed.
+- WeiClaw regression suite: 62/62 tests passed.
 - Scoped WeiClaw ESLint: zero warnings/errors.
 - Strict targeted TypeScript check: passed.
-- Direct Vinext production build, font copy, artifact validation, and rendered-HTML test: passed.
-- Repository-wide lint still contains the pre-existing `react-hooks/set-state-in-effect` issue in `components/Portfolio.tsx`; no new WeiClaw lint issue is present.
+- Direct Vinext production build, font copy, artifact validation, rendered-HTML test, and `git diff --check`: passed.
+- The repository-wide TypeScript check still reports pre-existing Cloudflare worker-environment declarations; the strict targeted WeiClaw check is clean.
 
 final result: passed
 

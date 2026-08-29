@@ -57,8 +57,8 @@ export const weiclawBookPages: WeiClawBookPage[] = [
     image: "/images/weiclaw/pages/customer.png",
     note: "关系、标签与上下文被保留在同一处",
     layout: "customer-dominant",
-    imageCrop: { x: 0.13, y: 0.04, width: 0.48, height: 0.86 },
-    detailCrop: { x: 0.52, y: 0.26, width: 0.43, height: 0.44 },
+    imageCrop: { x: 0.13, y: 0.08, width: 0.2, height: 0.84 },
+    detailCrop: { x: 0.35, y: 0.22, width: 0.3, height: 0.64 },
   },
   {
     id: "agent",
@@ -69,8 +69,8 @@ export const weiclawBookPages: WeiClawBookPage[] = [
     image: "/images/weiclaw/pages/agent.png",
     note: "AI 不是一个聊天窗口，而是一位可托管的员工",
     layout: "agent-details",
-    imageCrop: { x: 0.14, y: 0.17, width: 0.36, height: 0.5 },
-    detailCrop: { x: 0.46, y: 0.16, width: 0.48, height: 0.38 },
+    imageCrop: { x: 0.16, y: 0.22, width: 0.27, height: 0.35 },
+    detailCrop: { x: 0.43, y: 0.22, width: 0.37, height: 0.35 },
   },
   {
     id: "settings",

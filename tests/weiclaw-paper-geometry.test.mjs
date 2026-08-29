@@ -168,9 +168,50 @@ test("shapes settled page boundaries like an open book instead of rectangles", (
   const bottomSpine = position(mesh, 0, 16)[1];
   const bottomOuter = position(mesh, 40, 16)[1];
 
-  assert.ok(topMid > topOuter + 0.025, "top edge should arch upward between spine and fore edge");
-  assert.ok(topSpine > topOuter + 0.015, "top edge should stay raised at the binding");
-  assert.ok(bottomSpine < bottomOuter - 0.025, "bottom edge should dip into the binding");
+  assert.ok(topMid > topOuter + 0.008, "top edge should retain a restrained binding arch");
+  assert.ok(topSpine > topOuter + 0.008, "top edge should stay slightly raised at the binding");
+  assert.ok(bottomSpine < bottomOuter - 0.008, "bottom edge should dip gently into the binding");
+});
+
+test("keeps the settled sheet stiff outside the broad gutter valley", () => {
+  const mesh = createPaperMesh({
+    ...options,
+    side: "right",
+    mode: "settled",
+    progress: 0,
+  });
+  const allDepths = [0, 4, 8, 12, 16, 20, 24, 28, 32, 36, 40].map((column) => position(mesh, column)[2]);
+  const bodyDepths = [14, 18, 22, 26, 30, 34, 38, 40].map((column) => position(mesh, column)[2]);
+
+  assert.ok(Math.max(...allDepths) - Math.min(...allDepths) < 0.055, "settled paper should not form a large wave");
+  assert.ok(Math.max(...bodyDepths) - Math.min(...bodyDepths) < 0.018, "the page body should read as stiff paper");
+});
+
+test("forms a wide continuous gutter valley without a hard hinge", () => {
+  const mesh = createPaperMesh({
+    ...options,
+    side: "right",
+    mode: "settled",
+    progress: 0,
+  });
+  const gutterDepths = [0, 2, 4, 6, 8, 10].map((column) => position(mesh, column)[2]);
+  const adjacentChanges = gutterDepths.slice(1).map((depth, index) => depth - gutterDepths[index]);
+
+  assert.ok(gutterDepths[0] < gutterDepths[2]);
+  assert.ok(gutterDepths[2] < gutterDepths[4]);
+  assert.ok(Math.max(...adjacentChanges.map(Math.abs)) < 0.019, "gutter should transition gradually across several columns");
+});
+
+test("keeps the settled bottom edge firm instead of cloth-like", () => {
+  const mesh = createPaperMesh({
+    ...options,
+    side: "right",
+    mode: "settled",
+    progress: 0,
+  });
+  const lowerBody = [12, 16, 20, 24, 28, 32, 36, 40].map((column) => position(mesh, column, 16)[1]);
+
+  assert.ok(Math.max(...lowerBody) - Math.min(...lowerBody) < 0.022, "bottom edge should not undulate like soft fabric");
 });
 
 test("forms a continuous thick-book cross-section while settled", () => {
@@ -200,7 +241,9 @@ test("breaks the perfectly straight settled fore edge", () => {
   });
   const outerXs = [0, 4, 8, 12, 16].map((row) => position(mesh, 40, row)[0]);
 
-  assert.ok(Math.max(...outerXs) - Math.min(...outerXs) > 0.004);
+  const variation = Math.max(...outerXs) - Math.min(...outerXs);
+  assert.ok(variation > 0.0006, "fore edge should retain a trace of natural irregularity");
+  assert.ok(variation < 0.008, "fore edge irregularity should not become a large wave");
   assert.notEqual(outerXs[0].toFixed(4), outerXs[16 / 4].toFixed(4));
 });
 
