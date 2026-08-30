@@ -378,7 +378,7 @@ export class WeiClawPaperRenderer {
     gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, mesh.indices, gl.DYNAMIC_DRAW);
     gl.uniformMatrix4fv(this.paperLocations.matrix, false, this.matrix);
     gl.uniform3f(this.paperLocations.lightDirection, -0.62, 0.22, 1);
-    gl.uniform1f(this.paperLocations.spineDarkening, face === "settled" ? 0.07 : 0.125);
+    gl.uniform1f(this.paperLocations.spineDarkening, face === "settled" ? 0.035 : 0.125);
     gl.uniform1f(this.paperLocations.settled, face === "settled" ? 1 : 0);
     gl.uniform1f(this.paperLocations.backFace, face === "back" ? 1 : 0);
     gl.activeTexture(gl.TEXTURE0);

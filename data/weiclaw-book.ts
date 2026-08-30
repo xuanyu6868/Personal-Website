@@ -46,7 +46,7 @@ export const weiclawBookPages: WeiClawBookPage[] = [
     image: "/images/weiclaw/pages/chat.png",
     note: "在真实的企业沟通中，响应每一个客户",
     layout: "chat-column",
-    imageCrop: { x: 0.1, y: 0, width: 0.72, height: 1 },
+    imageCrop: { x: 0.34, y: 0.14, width: 0.36, height: 0.62 },
   },
   {
     id: "customer",

@@ -67,8 +67,10 @@ test("plans paper, copy, real artwork, note, and folio as one printed surface", 
   const image = plan.find((command) => command.kind === "image");
   assert.equal(image.source, "/images/weiclaw/pages/dashboard.png");
   assert.deepEqual(image.crop, { x: 0.05, y: 0.06, width: 0.92, height: 0.82 });
-  assert.ok(image.destination.x >= 0.1, "dashboard artwork should start inside the paper field");
-  assert.ok(image.destination.width <= 0.88, "dashboard artwork should leave a deliberate outer margin");
+  assert.ok(image.destination.x < 0, "dashboard artwork should intentionally bleed beyond the outer paper edge");
+  assert.ok(image.destination.width > 1, "dashboard artwork should establish a full-width editorial field");
+  assert.ok(image.destination.y >= 0.34, "dashboard title band should remain distinct above the bleed");
+  assert.ok(image.destination.y + image.destination.height <= 0.94, "dashboard bleed should preserve the printed folio");
 });
 
 test("prints an agent detail crop from the same real screenshot", () => {
@@ -173,10 +175,14 @@ test("renders default page textures at a print-safe raster resolution", async ()
   }
 });
 
-test("gives the chat artwork an intentional editorial inset", () => {
+test("turns chat into a focused portrait crop instead of another full UI screenshot", () => {
   const chat = weiclawBookPages.find((page) => page.id === "chat");
   const image = buildPageTexturePlan(chat, "right").find((command) => command.kind === "image");
 
-  assert.ok(image.destination.width <= 0.68, "chat artwork should not read as a full-page UI panel");
-  assert.ok(image.destination.x + image.destination.width <= 0.88, "chat artwork needs breathing room at the fore edge");
+  assert.ok(image.crop.x >= 0.32, "chat crop should remove the global navigation and conversation list");
+  assert.ok(image.crop.width <= 0.4, "chat crop should enlarge the core messages instead of shrinking a broad UI region");
+  assert.ok(image.crop.y >= 0.08 && image.crop.height <= 0.68, "chat crop should select the primary exchange rather than the entire workspace height");
+  assert.ok(image.destination.width >= 0.74, "the focused conversation should be enlarged on the page");
+  assert.ok(image.destination.height >= 0.62, "chat should form a tall editorial counterpoint to the dashboard bleed");
+  assert.ok(image.destination.x + image.destination.width <= 0.94, "the portrait crop should keep a deliberate fore-edge margin");
 });

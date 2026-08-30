@@ -183,8 +183,12 @@ test("keeps the settled sheet stiff outside the broad gutter valley", () => {
   const allDepths = [0, 4, 8, 12, 16, 20, 24, 28, 32, 36, 40].map((column) => position(mesh, column)[2]);
   const bodyDepths = [14, 18, 22, 26, 30, 34, 38, 40].map((column) => position(mesh, column)[2]);
 
-  assert.ok(Math.max(...allDepths) - Math.min(...allDepths) < 0.055, "settled paper should not form a large wave");
-  assert.ok(Math.max(...bodyDepths) - Math.min(...bodyDepths) < 0.018, "the page body should read as stiff paper");
+  const fullRange = Math.max(...allDepths) - Math.min(...allDepths);
+  const bodyRange = Math.max(...bodyDepths) - Math.min(...bodyDepths);
+
+  assert.ok(fullRange > 0.052, "the settled mesh silhouette should visibly read as open paper without shader AO");
+  assert.ok(fullRange < 0.08, "settled paper should not return to the previous cloth-like wave");
+  assert.ok(bodyRange < 0.026, "the page body should stay comparatively stiff outside the gutter");
 });
 
 test("forms a wide continuous gutter valley without a hard hinge", () => {
@@ -227,9 +231,9 @@ test("forms a continuous thick-book cross-section while settled", () => {
   const middleFall = position(mesh, 23)[2];
   const outerLift = position(mesh, 40)[2];
 
-  assert.ok(spine < -0.012, "the sheet should settle into the binding");
-  assert.ok(innerCrest > middleFall + 0.008, "the inner sheet stack should crest before falling");
-  assert.ok(outerLift > middleFall + 0.006, "the fore edge should lift again after the middle fall");
+  assert.ok(spine < -0.025, "the sheet geometry should settle visibly into the binding without relying on AO");
+  assert.ok(innerCrest > middleFall + 0.022, "the inner sheet stack should crest before easing into the body");
+  assert.ok(outerLift > middleFall + 0.01, "the fore edge should lift subtly after the calm middle section");
 });
 
 test("breaks the perfectly straight settled fore edge", () => {

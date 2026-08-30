@@ -79,19 +79,19 @@ const gaussian = (value: number, center: number, radius: number) =>
   Math.exp(-Math.pow((value - center) / radius, 2));
 
 const settledDepth = (u: number, v: number) => {
-  const spineDip = -0.022 * gaussian(u, 0, 0.145);
-  const innerCrest = 0.021 * gaussian(u, 0.2, 0.16);
-  const middleFall = -0.0035 * gaussian(u, 0.56, 0.34);
-  const outerLift = 0.008 * Math.pow(smoothstep(0.78, 1, u), 1.8);
-  const verticalBow = 0.0025 * (1 - Math.pow((v - 0.49) * 2, 2));
-  const pageTwist = 0.001 * Math.sin(Math.PI * v) * (u - 0.42);
+  const spineDip = -0.038 * gaussian(u, 0, 0.17);
+  const innerCrest = 0.042 * gaussian(u, 0.21, 0.17);
+  const middleFall = -0.005 * gaussian(u, 0.57, 0.34);
+  const outerLift = 0.012 * Math.pow(smoothstep(0.79, 1, u), 1.85);
+  const verticalBow = 0.003 * (1 - Math.pow((v - 0.49) * 2, 2));
+  const pageTwist = 0.0012 * Math.sin(Math.PI * v) * (u - 0.42);
   return spineDip + innerCrest + middleFall + outerLift + verticalBow + pageTwist;
 };
 
 const openBookBoundaryOffset = (u: number, v: number) => {
   const arch = Math.sin(Math.PI * u);
-  const topOffset = 0.016 * (1 - u) + 0.017 * arch;
-  const bottomOffset = -0.014 * (1 - u) - 0.004 * arch;
+  const topOffset = 0.019 * (1 - u) + 0.023 * arch;
+  const bottomOffset = -0.017 * (1 - u) - 0.0055 * arch;
   const edgeRipple = (0.00022 * Math.sin(u * Math.PI * 5.4) + 0.00012 * Math.sin(u * Math.PI * 11.3))
     * Math.pow(u, 0.8)
     * (v < 0.5 ? 1 : -0.65);

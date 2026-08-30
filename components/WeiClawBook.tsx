@@ -318,7 +318,7 @@ export default function WeiClawBook() {
             src="/images/weiclaw/book/book-shell.png"
             alt=""
             fill
-            sizes="min(119vw, 1165px)"
+            sizes="min(105vw, 1025px)"
             priority
             unoptimized
             draggable={false}

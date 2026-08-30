@@ -1,55 +1,53 @@
-# Design QA — WeiClaw Settled Paper Rigidity and Print Clarity v3
+# Design QA — WeiClaw Balanced Curvature and Editorial Spread v4
 
 ## Comparison target
 
-- Source visual truth: `/var/folders/9j/_8nq6sh97tbf3k2rgt35gg7c0000gn/T/codex-clipboard-9283f247-4574-430b-8317-8b0f4440584b.png`
-- Settled implementation screenshot: `/Users/xuanyumacbook/Personal-Website/design-qa-weiclaw-rigidity-after-01-final.png`
-- Editorial crop implementation screenshot: `/Users/xuanyumacbook/Personal-Website/design-qa-weiclaw-rigidity-after-03-final.png`
+- Original visual direction: `/var/folders/9j/_8nq6sh97tbf3k2rgt35gg7c0000gn/T/codex-clipboard-9283f247-4574-430b-8317-8b0f4440584b.png`
+- Immediate source state for this correction: `/Users/xuanyumacbook/Personal-Website/design-qa-weiclaw-rigidity-after-01-final.png`
+- Revised settled implementation: `/Users/xuanyumacbook/Personal-Website/design-qa-weiclaw-curvature-v4-01-final.png`
+- Revised secondary spread: `/Users/xuanyumacbook/Personal-Website/design-qa-weiclaw-curvature-v4-03.png`
 - Route: `http://127.0.0.1:4173/?audit=verified#project-weiclaw`
 - Viewport: 1536 × 1024 CSS px
 - Source and implementation pixels: 1536 × 1024 each
 - Device scale factor: 1; no density normalization required
 - Settled state: WeiClaw spread `01 / 05`, pointer outside the book, no hover curl
-- Secondary settled state: WeiClaw spread `03 / 05`, showing the customer-management and AI-agent crop system
+- Secondary settled state: WeiClaw spread `03 / 05` after a forward turn
 
 ## Evidence
 
-- Full-view source/implementation comparison: `/Users/xuanyumacbook/Personal-Website/design-qa-weiclaw-rigidity-reference-comparison.png`
-- Previous/current implementation comparison: `/Users/xuanyumacbook/Personal-Website/design-qa-weiclaw-rigidity-before-after-comparison.png`
-- Focused `03 / 05` print and crop evidence: `/Users/xuanyumacbook/Personal-Website/design-qa-weiclaw-rigidity-after-03-final-crop.png`
+- Full-view previous/current comparison: `/Users/xuanyumacbook/Personal-Website/design-qa-weiclaw-curvature-v4-comparison.png`
+- Focused revised `01 / 02` evidence: `/Users/xuanyumacbook/Personal-Website/design-qa-weiclaw-curvature-v4-01-final.png`
+- Secondary-spread and turn-completion evidence: `/Users/xuanyumacbook/Personal-Website/design-qa-weiclaw-curvature-v4-03.png`
 
 ## Findings
 
-- No actionable P0/P1/P2 visual or interaction differences remain for this correction scope.
-- [P3] The reference shell and page stack are photographic and therefore retain slightly richer edge micro-detail than the live top leaves.
-- [P3] The reference uses a different mountain-video frame; composition, scale, spread position, and contrast were judged independently of that frame difference.
-- [P3] The reference shows a dramatic lifted sheet in its static state. The settled implementation deliberately keeps stiff leaves and reserves the C-shaped curl for interaction, following the user's latest direction.
+- No actionable P0/P1/P2 visual or interaction differences remain for the four requested corrections.
+- [P3] The photographic shell retains slightly richer micro-detail than the live WebGL top leaves; the material boundary remains coherent at the target size.
+- [P3] The mountain video frame changes between captures, so QA judged book scale, placement, visible background area, and contrast independently of the exact frame.
 
 ## Required fidelity surfaces
 
 - Fonts and typography: editorial serif titles, condensed page labels, Chinese project copy, and handwritten annotations retain the intended hierarchy, optical contrast, wrapping, and restrained spacing.
-- Spacing and layout rhythm: left project copy, right-shifted book, visible mountain background, centered gutter, book scale, and bottom status align with the reference composition at 1536 × 1024.
+- Spacing and layout rhythm: the book now measures 1025px wide at the 1536px viewport, down from 1165px, while retaining the left intro, right-shifted placement, visible top/side mountain field, and bottom status.
 - Colors and visual tokens: warm ivory paper, preserved charcoal/black UI detail, blue rules, dark cover, broad soft gutter shading, and non-glowing contact shadows form one material system.
-- Image quality and asset fidelity: every page texture renders at 1536 × 1980, caches decoded artwork, applies paper tint only to near-white UI surfaces, and keeps text, chart lines, borders, and black values intact under shared grain and curvature lighting.
-- Copy and content: the first spread preserves `01 DASHBOARD`, `02 CHAT`, 数据总览, 企业微信真实聊天, and `01 / 05`; `03 / 05` uses an intentional customer list/detail crop and an enlarged AI status/workflow crop rather than a faded full-dashboard panel.
+- Image quality and asset fidelity: 1536 × 1980 page textures and the existing white-only paper tint remain unchanged. Dashboard uses a 106%-wide lower-page bleed; Chat uses a tightly focused, aspect-matched crop of the central exchange without reducing screenshot opacity.
+- Copy and content: the first spread preserves `01 DASHBOARD`, `02 CHAT`, 数据总览, 企业微信真实聊天, and `01 / 05`; later spreads and all existing copy remain unchanged.
 
 ## Comparison history
 
-1. Prior v2 had P2 over-deformation: settled pages carried large body and bottom-edge waves that read as cloth rather than stiff book paper.
-2. Fix: reduced settled depth outside the gutter, concentrated curvature into a broad continuous valley, reduced edge ripple and corner droop, and retained only a tiny outer lift. Automated geometry limits now keep the full settled depth range below `0.055` and the body range below `0.018`.
-3. Prior v2 had P2 washed printing: the print treatment reduced the whole screenshot's contrast and made the AI-agent page approach a translucent background.
-4. Fix: switched to source-over artwork, preserved dark/midtone pixels, tinted near-white UI surfaces only, raised print contrast, and applied subtle shared grain without a full-page opacity reduction.
-5. Prior v2 had P2 generic framing: customer and AI pages still resembled full screenshots placed into a repeated template.
-6. Fix: `03` now pairs a deliberate customer-list crop with an overlapping detail region; `04` isolates the agent status ring and enlarges the audited workflow core.
-7. High-resolution texture generation initially added avoidable transition latency. Fix: cached decoded images and restricted pixel sampling to artwork layers instead of processing the complete 1536 × 1980 page.
-8. Post-fix evidence: the settled comparison shows a firm page body, wide soft gutter, readable print blacks, clear top-leaf/page-stack separation, and focused asymmetric editorial crops.
+1. The v3 settled mesh was a P2 visual regression for this brief: its total centerline depth range was only about `0.035`, so the spread approached two flat boards when shader shading was ignored.
+2. Fix: deepened and widened the geometric binding valley, restored a controlled inner crest and tiny outer lift, and increased only the broad top/bottom binding arcs. New tests require a visible `> 0.052` full range while capping it below `0.08` and keeping the page-body range below `0.026`.
+3. The v3 gutter depended too strongly on a gray shader/CSS band. Fix: reduced settled WebGL spine AO from `0.07` to `0.035`, halved the CSS gutter tones, widened their blur, and let mesh normals carry the primary transition.
+4. The v3 first spread was P2 repetitive: both pages used the same title/blank-space/rectangular-screen rhythm. Fix: Dashboard now bleeds horizontally beyond the page field, while Chat removes navigation/profile columns and enlarges the central message exchange as a tall portrait crop.
+5. The v3 book dominated the scene at 1165px. Fix: reduced the desktop shell to 1025px (12%), softened its vertical scale, and re-centered it to expose more lake and mountain background.
+6. Post-fix evidence: the comparison shows visibly increased paper curvature without large body waves, a quieter gutter, substantially different left/right editorial rhythms, and a smaller scene-scale object.
 
 ## Primary interactions tested
 
 - Hovering the lower-right page edge lifts the fore-corner without changing spreads.
 - Next/previous transitions complete `01 / 05` → `03 / 05` → `01 / 05` and restore the stiff settled mesh.
 - Turning-geometry regression tests cover `p = 0.2 / 0.5 / 0.8`; their dynamic depth ranges remain substantially larger than the settled limits, preserving the C-shaped sheet only while turning.
-- The `03 / 05` spread uses asymmetric customer and AI workflow fragments instead of duplicating the first template.
+- At 820 × 900 the book resolves to 760px wide, the page has no horizontal overflow (`scrollWidth = innerWidth = 820`), and the next-page control remains enabled.
 - Browser console warnings/errors during the final visual pass: none.
 
 ## Verification

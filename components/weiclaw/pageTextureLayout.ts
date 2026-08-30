@@ -12,16 +12,16 @@ export type PagePrintLayout = {
 
 const layouts: Record<WeiClawBookPage["layout"], PagePrintLayout> = {
   "dashboard-bleed": {
-    header: { x: 0.12, y: 0.08, width: 0.46, height: 0.24 },
-    image: { x: 0.1, y: 0.43, width: 0.87, height: 0.49 },
+    header: { x: 0.12, y: 0.065, width: 0.46, height: 0.24 },
+    image: { x: -0.03, y: 0.38, width: 1.06, height: 0.52 },
     note: { x: 0.61, y: 0.1, width: 0.26, height: 0.18 },
-    imageRotation: -0.006,
+    imageRotation: -0.004,
   },
   "chat-column": {
-    header: { x: 0.1, y: 0.08, width: 0.48, height: 0.27 },
-    image: { x: 0.18, y: 0.38, width: 0.66, height: 0.57 },
+    header: { x: 0.08, y: 0.07, width: 0.48, height: 0.25 },
+    image: { x: 0.14, y: 0.32, width: 0.76, height: 0.64 },
     note: { x: 0.62, y: 0.09, width: 0.27, height: 0.2 },
-    imageRotation: 0.005,
+    imageRotation: 0.003,
   },
   "customer-dominant": {
     header: { x: 0.11, y: 0.07, width: 0.52, height: 0.22 },
