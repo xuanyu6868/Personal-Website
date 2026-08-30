@@ -1,3 +1,55 @@
+# Design QA — WeiClaw Exposed Page Stack v5
+
+## Comparison target
+
+- Source visual truth: `/var/folders/9j/_8nq6sh97tbf3k2rgt35gg7c0000gn/T/codex-clipboard-9283f247-4574-430b-8317-8b0f4440584b.png`
+- Previous implementation: `/Users/xuanyumacbook/Personal-Website/design-qa-weiclaw-curvature-v4-01-final.png`
+- Revised implementation: `/Users/xuanyumacbook/Personal-Website/design-qa-weiclaw-page-stack-final.png`
+- Revised secondary spread: `/Users/xuanyumacbook/Personal-Website/design-qa-weiclaw-page-stack-after-turn.png`
+- Side-by-side evidence: `/Users/xuanyumacbook/Personal-Website/design-qa-weiclaw-page-stack-comparison.png`
+- Route: `http://127.0.0.1:4173/?audit=verified#project-weiclaw`
+- Viewport: 1536 × 1024 CSS px
+- Source and implementation pixels: 1536 × 1024 each
+- Device scale factor: 1; no density normalization required
+- States: settled spreads `01 / 05` and `03 / 05`, pointer outside the book
+
+## Findings
+
+- No actionable P0/P1/P2 issue remains for the requested page-edge correction.
+- [P3] The live spread remains intentionally smaller than the original concept image so more of the moving mountain scene stays visible.
+- [P3] The source mock shows a default curled page; the current settled state remains flat by the user's later direction, while page curl is reserved for hover and turn interaction.
+
+## Required fidelity surfaces
+
+- Fonts and typography: no typography, wrapping, page-copy, or print-resolution changes were introduced.
+- Spacing and layout rhythm: book size and placement are unchanged. The exposed side stacks now occupy the existing shell margin instead of shrinking the editorial content.
+- Colors and visual tokens: the new layer inherits the photographed shell's warm gray paper edges, dark cover contact tones, and directional lighting without synthetic page-line gradients.
+- Image quality and asset fidelity: a 1536 × 1024 transparent raster derived from the existing photographic shell preserves the real left, right, and bottom page stacks while clearing the complete central paper surface.
+- Copy and content: all five pages and the current editorial layouts remain unchanged.
+
+## Comparison history
+
+1. Previous capture: the WebGL paper canvas covered most of the photographic shell's outer page stack, leaving only a narrow bottom line and almost no visible side layering.
+2. Fix: extracted the real side and bottom stacks from `book-shell.png` into a transparent foreground raster and layered it above the deformable paper canvas. The mesh, layout, book scale, and turn model were not changed.
+3. Post-fix evidence: both settled captures show multiple photographed paper layers at the left and right fore edges, a continuous stacked bottom edge, the central binding point, and the hard cover beneath.
+4. Turn-completion evidence: `01 / 05` advances to `03 / 05` and the physical edge stack remains registered to the shell without covering the printed page body.
+
+## Primary interactions tested
+
+- Next-page transition completes `01 / 05` → `03 / 05`; previous-page transition restores `01 / 05`.
+- Both edge controls remain enabled/disabled in their correct boundary states.
+- Browser console warnings/errors during the visual pass: none.
+
+## Verification
+
+- WeiClaw regression suite: 63/63 tests passed.
+- The page-stack asset regression checks both side edges, the bottom stack, transparent paper center, dimensions, and alpha channel.
+- Final build, lint, TypeScript, artifact, and diff verification are recorded at handoff.
+
+final result: passed
+
+---
+
 # Design QA — WeiClaw Balanced Curvature and Editorial Spread v4
 
 ## Comparison target

@@ -347,6 +347,16 @@ export default function WeiClawBook() {
             reducedMotion={Boolean(reduceMotion)}
             onReady={setMeshReady}
           />
+          <Image
+            className="weiclaw-book__page-stack"
+            src="/images/weiclaw/book/book-page-stack.png"
+            alt=""
+            fill
+            sizes="min(105vw, 1025px)"
+            unoptimized
+            draggable={false}
+            aria-hidden="true"
+          />
           <span className="weiclaw-book__gutter" aria-hidden="true" />
 
           <div className="weiclaw-book__semantic-pages" aria-live="polite">
