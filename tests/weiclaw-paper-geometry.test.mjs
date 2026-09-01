@@ -272,6 +272,9 @@ test("folds the lower fore corner inward on page-edge hover", () => {
   assert.ok(rest[0] - hover[0] > 0.03, "hovered right corner should pull toward the spine");
   assert.ok(hover[1] - rest[1] > 0.02, "hovered lower corner should visibly lift upward");
   assert.ok(hover[2] - rest[2] > 0.04, "hovered lower corner should rise off the page stack");
+  assert.ok(rest[0] - hover[0] < 0.11, "hover curl should remain a corner cue rather than folding the whole sheet");
+  assert.ok(hover[1] - rest[1] < 0.09, "hover curl must stay restrained until the reader drags");
+  assert.ok(hover[2] - rest[2] < 0.16, "hover curl should preserve the book's settled silhouette");
 });
 
 test("returns finite positions, normals, uvs, and valid indices", () => {

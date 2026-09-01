@@ -35,7 +35,7 @@ export const weiclawBookPages: WeiClawBookPage[] = [
     image: "/images/weiclaw/pages/dashboard.png",
     note: "全局数据概览 / 一目了然",
     layout: "dashboard-bleed",
-    imageCrop: { x: 0.05, y: 0.06, width: 0.92, height: 0.82 },
+    imageCrop: { x: 0.14, y: 0.08, width: 0.8, height: 0.72 },
   },
   {
     id: "chat",

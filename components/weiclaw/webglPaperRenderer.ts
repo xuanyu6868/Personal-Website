@@ -77,9 +77,9 @@ const paperFragmentShader = `
     float spineShade = 1.0 - uSpineDarkening * exp(-pow(abs(vWorldPosition.x) / 0.19, 2.0));
     float crest = pow(max(dot(normal, normalize(vec3(-0.31, 0.33, 1.0))), 0.0), 8.0) * 0.038;
     float pageDistance = abs(vWorldPosition.x);
-    float innerLift = mix(0.052, 0.014, uSettled) * exp(-pow((pageDistance - 0.18) / 0.15, 2.0));
-    float middleSettle = mix(0.034, 0.005, uSettled) * exp(-pow((pageDistance - 0.57) / 0.32, 2.0));
-    float outerLift = mix(0.022, 0.003, uSettled) * smoothstep(0.78, 1.02, pageDistance);
+    float innerLift = mix(0.052, 0.023, uSettled) * exp(-pow((pageDistance - 0.2) / 0.18, 2.0));
+    float middleSettle = mix(0.034, 0.008, uSettled) * exp(-pow((pageDistance - 0.58) / 0.34, 2.0));
+    float outerLift = mix(0.022, 0.006, uSettled) * smoothstep(0.79, 1.02, pageDistance);
     float foldLighting = 1.0 + innerLift - middleSettle + outerLift;
     vec2 paperUv = vec2(uBackFace > 0.5 ? 1.0 - vUv.x : vUv.x, vUv.y);
     vec4 paper = texture2D(uPageTexture, paperUv);
@@ -112,7 +112,18 @@ const solidFragmentShader = `
 
 const clamp = (value: number, min = 0, max = 1) => Math.min(max, Math.max(min, value));
 
-export function buildPaperDrawPlan({ direction }: Pick<PaperRenderFrame, "direction">): PaperDrawOperation[] {
+type PaperDrawPlanInput = Pick<PaperRenderFrame, "direction"> & Partial<
+  Pick<PaperRenderFrame, "hoverDirection" | "hoverLift" | "reducedMotion">
+>;
+
+function resolveActiveDirection(frame: PaperDrawPlanInput): TurnDirection | null {
+  if (frame.direction) return frame.direction;
+  if (frame.reducedMotion || !frame.hoverDirection || (frame.hoverLift ?? 0) <= 0) return null;
+  return frame.hoverDirection;
+}
+
+export function buildPaperDrawPlan(frame: PaperDrawPlanInput): PaperDrawOperation[] {
+  const direction = resolveActiveDirection(frame);
   const operations: PaperDrawOperation[] = [
     { kind: "paper", side: "left", texture: direction === "previous" ? "under" : "left" },
     { kind: "paper", side: "right", texture: direction === "next" ? "under" : "right" },
@@ -291,41 +302,50 @@ export class WeiClawPaperRenderer {
     if (this.disposed) return;
     const gl = this.gl;
     gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
-    const turningMesh = frame.direction ? this.createTurningMesh(frame) : null;
+    const activeDirection = resolveActiveDirection(frame);
+    const hoverTurn = !frame.direction && Boolean(activeDirection);
+    const activeProgress = frame.direction
+      ? clamp(frame.progress)
+      : clamp(0.105 * frame.hoverLift);
+    const turningMesh = activeDirection
+      ? this.createTurningMesh(frame, activeDirection, activeProgress, hoverTurn ? frame.hoverLift : 0)
+      : null;
     const plan = buildPaperDrawPlan(frame);
 
     for (const operation of plan) {
       if (operation.kind === "paper") {
-        const mesh = this.createSettledMesh(operation.side, frame);
-        this.drawPaperSurface(mesh, frame.textures[operation.texture], "settled", frame.direction);
+        const mesh = this.createSettledMesh(operation.side);
+        this.drawPaperSurface(mesh, frame.textures[operation.texture], "settled", activeDirection);
       } else if (operation.kind === "shadow" && turningMesh) {
-        this.drawProjectedShadow(turningMesh, frame.progress);
+        this.drawProjectedShadow(turningMesh, hoverTurn ? Math.max(activeProgress, 0.18) : activeProgress);
       } else if (operation.kind === "turning" && turningMesh) {
-        this.drawPaperSurface(turningMesh, frame.textures[operation.texture], operation.face, frame.direction);
+        this.drawPaperSurface(turningMesh, frame.textures[operation.texture], operation.face, activeDirection);
       } else if (operation.kind === "edge" && turningMesh) {
-        this.drawPageEdge(turningMesh, frame.progress);
+        this.drawPageEdge(turningMesh, hoverTurn ? Math.max(activeProgress, 0.12) : activeProgress);
       }
     }
     this.releaseUnusedTextures(frame.textures);
   }
 
-  private createSettledMesh(side: "left" | "right", frame: PaperRenderFrame) {
-    const hoverMatches = (side === "right" && frame.hoverDirection === "next")
-      || (side === "left" && frame.hoverDirection === "previous");
+  private createSettledMesh(side: "left" | "right") {
     return createPaperMesh({
       ...this.resolution,
       width: 1,
       height: 1.28,
       side,
-      mode: hoverMatches && frame.hoverLift > 0 ? "turning" : "settled",
+      mode: "settled",
       direction: side === "right" ? "next" : "previous",
       progress: 0,
-      cornerLift: frame.reducedMotion ? 0 : frame.hoverLift,
+      cornerLift: 0,
     });
   }
 
-  private createTurningMesh(frame: PaperRenderFrame) {
-    const direction = frame.direction ?? "next";
+  private createTurningMesh(
+    frame: PaperRenderFrame,
+    direction: TurnDirection,
+    progress: number,
+    cornerLift = 0,
+  ) {
     return createPaperMesh({
       ...this.resolution,
       width: 1,
@@ -333,7 +353,8 @@ export class WeiClawPaperRenderer {
       side: direction === "next" ? "right" : "left",
       mode: "turning",
       direction,
-      progress: clamp(frame.progress),
+      progress: clamp(progress),
+      cornerLift: frame.reducedMotion ? 0 : cornerLift,
     });
   }
 

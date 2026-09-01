@@ -13,7 +13,7 @@ export type PagePrintLayout = {
 const layouts: Record<WeiClawBookPage["layout"], PagePrintLayout> = {
   "dashboard-bleed": {
     header: { x: 0.12, y: 0.065, width: 0.46, height: 0.24 },
-    image: { x: -0.03, y: 0.38, width: 1.06, height: 0.52 },
+    image: { x: -0.025, y: 0.36, width: 1.05, height: 0.55 },
     note: { x: 0.61, y: 0.1, width: 0.26, height: 0.18 },
     imageRotation: -0.004,
   },
@@ -25,16 +25,16 @@ const layouts: Record<WeiClawBookPage["layout"], PagePrintLayout> = {
   },
   "customer-dominant": {
     header: { x: 0.11, y: 0.07, width: 0.52, height: 0.22 },
-    image: { x: 0.06, y: 0.34, width: 0.4, height: 0.59 },
+    image: { x: 0.02, y: 0.33, width: 0.42, height: 0.6 },
     note: { x: 0.66, y: 0.09, width: 0.24, height: 0.16 },
-    detailImages: [{ x: 0.4, y: 0.39, width: 0.56, height: 0.5 }],
+    detailImages: [{ x: 0.4, y: 0.35, width: 0.57, height: 0.58 }],
     imageRotation: -0.006,
   },
   "agent-details": {
     header: { x: 0.1, y: 0.07, width: 0.5, height: 0.23 },
-    image: { x: 0.06, y: 0.4, width: 0.4, height: 0.45 },
+    image: { x: 0.04, y: 0.34, width: 0.41, height: 0.56 },
     note: { x: 0.66, y: 0.08, width: 0.25, height: 0.18 },
-    detailImages: [{ x: 0.28, y: 0.49, width: 0.68, height: 0.4 }],
+    detailImages: [{ x: 0.27, y: 0.37, width: 0.7, height: 0.55 }],
     imageRotation: 0.005,
   },
   "settings-wide": {

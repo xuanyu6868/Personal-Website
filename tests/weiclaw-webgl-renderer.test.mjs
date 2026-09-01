@@ -32,6 +32,32 @@ test("draws only the settled spread when no page is turning", () => {
   ]);
 });
 
+test("renders a restrained physical curl when the reader approaches a page edge", () => {
+  assert.deepEqual(buildPaperDrawPlan({
+    direction: null,
+    hoverDirection: "next",
+    hoverLift: 1,
+    reducedMotion: false,
+  }), [
+    { kind: "paper", side: "left", texture: "left" },
+    { kind: "paper", side: "right", texture: "under" },
+    { kind: "shadow" },
+    { kind: "turning", face: "back", texture: "turningBack" },
+    { kind: "turning", face: "front", texture: "turningFront" },
+    { kind: "edge" },
+  ]);
+
+  assert.deepEqual(buildPaperDrawPlan({
+    direction: null,
+    hoverDirection: "next",
+    hoverLift: 1,
+    reducedMotion: true,
+  }), [
+    { kind: "paper", side: "left", texture: "left" },
+    { kind: "paper", side: "right", texture: "right" },
+  ]);
+});
+
 test("uses the bounded desktop and narrow mesh resolutions", () => {
   assert.deepEqual(getPaperMeshResolution(1165), { columns: 40, rows: 16 });
   assert.deepEqual(getPaperMeshResolution(560), { columns: 24, rows: 10 });

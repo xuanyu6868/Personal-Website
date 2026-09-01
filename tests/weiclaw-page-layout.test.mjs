@@ -66,7 +66,7 @@ test("plans paper, copy, real artwork, note, and folio as one printed surface", 
   ]);
   const image = plan.find((command) => command.kind === "image");
   assert.equal(image.source, "/images/weiclaw/pages/dashboard.png");
-  assert.deepEqual(image.crop, { x: 0.05, y: 0.06, width: 0.92, height: 0.82 });
+  assert.deepEqual(image.crop, { x: 0.14, y: 0.08, width: 0.8, height: 0.72 });
   assert.ok(image.destination.x < 0, "dashboard artwork should intentionally bleed beyond the outer paper edge");
   assert.ok(image.destination.width > 1, "dashboard artwork should establish a full-width editorial field");
   assert.ok(image.destination.y >= 0.34, "dashboard title band should remain distinct above the bleed");
@@ -84,6 +84,8 @@ test("prints an agent detail crop from the same real screenshot", () => {
   assert.ok(images[0].destination.width < 0.5, "agent overview should read as a focused printed fragment");
   assert.ok(images[0].destination.height >= 0.43, "AI status should be enlarged enough to read");
   assert.ok(images[1].destination.width >= 0.68, "workflow should be the dominant editorial crop");
+  assert.ok(images[0].destination.y <= 0.35 && images[0].destination.y + images[0].destination.height >= 0.9, "AI status should use the lower editorial field instead of floating as a small card");
+  assert.ok(images[1].destination.y + images[1].destination.height >= 0.9, "workflow crop should remain legible at the target viewport");
 });
 
 test("splits customer management into an asymmetric editorial pair", () => {
@@ -97,6 +99,7 @@ test("splits customer management into an asymmetric editorial pair", () => {
   assert.ok(images[1].destination.x >= 0.4, "customer detail should be separated from the list crop");
   assert.ok(images[1].destination.width >= 0.54, "customer detail should be enlarged rather than showing a tiny dashboard overview");
   assert.notEqual(images[0].destination.y, images[1].destination.y);
+  assert.ok(images[1].destination.y + images[1].destination.height >= 0.92, "customer detail should occupy a readable editorial field");
 });
 
 test("warms printed pixels deterministically without changing alpha", () => {

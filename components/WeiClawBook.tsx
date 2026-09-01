@@ -101,9 +101,10 @@ export default function WeiClawBook() {
   const nextSpreadRight = weiclawBookPages[spreadStart + 3] ?? null;
   const previousSpreadLeft = weiclawBookPages[Math.max(0, spreadStart - 2)] ?? currentPage;
   const previousSpreadRight = weiclawBookPages[Math.max(0, spreadStart - 1)] ?? currentPage;
-  const turnFrontPage = dragDirection === "previous" ? currentPage : nextPage;
-  const turnBackPage = dragDirection === "previous" ? previousSpreadRight : nextSpreadLeft;
-  const underPage = dragDirection === "previous" ? previousSpreadLeft : nextSpreadRight;
+  const activePaperDirection = dragDirection ?? hoverEdge;
+  const turnFrontPage = activePaperDirection === "previous" ? currentPage : nextPage;
+  const turnBackPage = activePaperDirection === "previous" ? previousSpreadRight : nextSpreadLeft;
+  const underPage = activePaperDirection === "previous" ? previousSpreadLeft : nextSpreadRight;
   const canGoPrevious = spreadStart > 0;
   const canGoNext = spreadStart + 2 < weiclawBookPages.length;
 
@@ -157,6 +158,7 @@ export default function WeiClawBook() {
       setTurning(null);
       setReturning(null);
       setDragDirection(null);
+      setHoverEdge(null);
       setProgress(0);
     });
   };
@@ -367,7 +369,7 @@ export default function WeiClawBook() {
           <button className="weiclaw-book__edge-hit weiclaw-book__edge-hit--left" type="button" aria-label="Previous page" onPointerDown={(event) => onPointerDown(event, "previous")} onClick={(event) => onEdgeClick(event, "previous")} disabled={!canGoPrevious || Boolean(turning)} />
           <button className="weiclaw-book__edge-hit weiclaw-book__edge-hit--right" type="button" aria-label="Next page" onPointerDown={(event) => onPointerDown(event, "next")} onClick={(event) => onEdgeClick(event, "next")} disabled={!canGoNext || Boolean(turning)} />
         </div>
-        <div className="weiclaw-book__status"><b>{currentPage.number} / {String(weiclawBookPages.length).padStart(2, "0")}</b><span>DRAG THE PAGE TO EXPLORE</span></div>
+        <div className="weiclaw-book__status"><b>{currentPage.number} / {String(weiclawBookPages.length).padStart(2, "0")}</b><span>拖动页角翻页</span></div>
       </div>
 
       {previewPage && (

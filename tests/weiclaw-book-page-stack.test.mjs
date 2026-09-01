@@ -30,3 +30,12 @@ test("keeps the real side and bottom page stacks while clearing the paper surfac
   assert.ok((await alphaAt(image, 768, 875)) > 180, "bottom page stack should remain visible");
   assert.equal(await alphaAt(image, 768, 500), 0, "the page surface must stay transparent");
 });
+
+test("tapers the side stacks into narrow layered fore edges", async () => {
+  const image = sharp(stackAsset);
+
+  assert.ok((await alphaAt(image, 180, 500)) > 180, "left stack should retain its outer paper layers");
+  assert.ok((await alphaAt(image, 200, 500)) < 40, "left stack must not form a broad straight strip");
+  assert.ok((await alphaAt(image, 1360, 500)) > 180, "right stack should retain its outer paper layers");
+  assert.ok((await alphaAt(image, 1340, 500)) < 40, "right stack must not form a broad straight strip");
+});

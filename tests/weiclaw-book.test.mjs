@@ -106,6 +106,12 @@ test("keeps semantic page content and reports completed spreads", () => {
   assert.match(componentSource, /Open \$\{page\.title/);
 });
 
+test("places a concise Chinese page-turn cue beside the book", () => {
+  assert.match(componentSource, /拖动页角翻页/);
+  assert.doesNotMatch(componentSource, /DRAG THE PAGE TO EXPLORE/);
+  assert.match(stylesheet, /\.weiclaw-book__status\s*\{[^}]*font-size:(?:9|10)px/);
+});
+
 test("layers the paper canvas inside the shell without rigid flip CSS", () => {
   assert.match(stylesheet, /\.weiclaw-book__paper-canvas\s*\{[^}]*position:absolute/);
   assert.match(stylesheet, /\.weiclaw-book__paper-canvas\s*\{[^}]*pointer-events:none/);

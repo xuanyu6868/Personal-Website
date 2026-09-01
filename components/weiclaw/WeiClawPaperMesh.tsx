@@ -173,7 +173,7 @@ export default function WeiClawPaperMesh(props: WeiClawPaperMeshProps) {
       underPage: props.underPage,
       turningFrontPage: props.turningFrontPage,
       turningBackPage: props.turningBackPage,
-      direction: props.direction,
+      direction: props.direction ?? props.hoverDirection,
     });
     const activeKeys = new Set<string>();
 
@@ -216,6 +216,7 @@ export default function WeiClawPaperMesh(props: WeiClawPaperMeshProps) {
     };
   }, [
     props.direction,
+    props.hoverDirection,
     props.leftPage,
     props.rightPage,
     props.turningBackPage,

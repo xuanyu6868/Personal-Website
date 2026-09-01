@@ -16,16 +16,17 @@ const { data, info } = await sharp(sourcePath)
 const output = Buffer.from(data);
 
 for (let y = 0; y < info.height; y += 1) {
-  const sideProgress = Math.min(1, Math.max(0, (y - 112) / 800));
-  const leftInnerEdge = 232 - sideProgress * 60;
-  const rightInnerEdge = 1304 + sideProgress * 72;
+  const sideProgress = Math.min(1, Math.max(0, (y - 118) / 700));
+  const sideCurve = Math.sin(Math.PI * sideProgress);
+  const leftInnerEdge = 205 - sideProgress * 28 + sideCurve * 3;
+  const rightInnerEdge = 1331 + sideProgress * 34 - sideCurve * 3;
 
   for (let x = 0; x < info.width; x += 1) {
     const bottomStackTop = 838 + 0.000075 * (x - info.width / 2) ** 2;
     const sideFeather = Math.max(leftInnerEdge - x, x - rightInnerEdge);
     const bottomFeather = y - bottomStackTop;
     const maskDistance = Math.max(sideFeather, bottomFeather);
-    const maskAlpha = Math.min(1, Math.max(0, (maskDistance + 1) / 7));
+    const maskAlpha = Math.min(1, Math.max(0, (maskDistance + 0.5) / 5));
     const pixelIndex = (y * info.width + x) * info.channels;
     const alphaIndex = pixelIndex + 3;
 

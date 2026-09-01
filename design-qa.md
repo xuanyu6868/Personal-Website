@@ -50,6 +50,44 @@ final result: passed
 
 ---
 
+# Design QA — WeiClaw Page-Edge Hierarchy and Hover Curl v5
+
+## Comparison target
+
+- Original visual direction: `/var/folders/9j/_8nq6sh97tbf3k2rgt35gg7c0000gn/T/codex-clipboard-9283f247-4574-430b-8317-8b0f4440584b.png`
+- Revised first spread: `/Users/xuanyumacbook/Personal-Website/audit/weiclaw-self-review-2026-08-31/07-final-rest.png`
+- Revised hover curl: `/Users/xuanyumacbook/Personal-Website/audit/weiclaw-self-review-2026-08-31/08-final-hover.png`
+- Revised second spread: `/Users/xuanyumacbook/Personal-Website/audit/weiclaw-self-review-2026-08-31/06-second-spread-after.png`
+- Side-by-side source/implementation comparison: `/Users/xuanyumacbook/Personal-Website/audit/weiclaw-self-review-2026-08-31/09-reference-final-comparison.png`
+- Route: `http://127.0.0.1:4173/?audit=verified#project-weiclaw`
+- Browser viewport: 1076 × 922 CSS px
+
+## Findings and fixes
+
+1. The prior hover state only deformed a settled mesh, so the page corner was almost indistinguishable. Hover now uses the same physical render order as a turn: receiver page, projected shadow, paper back, printed front, and page edge. Reduced motion continues to show the settled spread.
+2. The prior side stacks read as broad, straight vertical strips. Their photographic mask now follows a narrower curved boundary with a shorter feather, preserving many real paper layers without becoming a frame.
+3. The live sheet and shell now share a stronger broad inner-crest/middle-settle/outer-lift lighting rhythm. The photographic page stack remains above settled paper, while the deforming sheet rises above it only during hover or a real turn.
+4. Dashboard now uses a tighter intentional crop that removes the dark application rail and enlarges the operational metrics. Customer and AI Agent fragments occupy more of the lower editorial field while retaining two distinct page rhythms and full black/midtone detail.
+5. The turn cue is now the clearer Chinese label `拖动页角翻页`, positioned closer to the book with higher legibility.
+
+## Visual review
+
+- No actionable P0/P1/P2 mismatch remains for the requested page-edge hierarchy and ordered repair pass.
+- The static spread clearly preserves left, right, and bottom paper stacks, a hard cover, contact shadow, central binding valley, and stiff top sheets.
+- The hover state is deliberately restrained: the lower fore-corner lifts, exposes the receiver sheet, and gains a moving contact shadow without introducing the previously rejected permanent triangular curl.
+- The original mock uses a larger dramatic pre-curled sheet. The current settled state intentionally follows the user's later request for a normal page at rest and reserves the visible curl for hover/drag.
+
+## Interaction checks
+
+- Right-edge hover enters `is-edge-next` and renders the physical curl path without changing `01 / 05`.
+- Next-page control completes `01 / 05` → `03 / 05`; previous-page control restores the first spread.
+- The side/bottom page stack remains registered after spread changes.
+- The drag implementation and `p = 0.2 / 0.5 / 0.8` geometry regressions remain covered by the WeiClaw test suite.
+
+final result: passed
+
+---
+
 # Design QA — WeiClaw Balanced Curvature and Editorial Spread v4
 
 ## Comparison target

@@ -209,9 +209,9 @@ export function createPaperMesh(options: PaperMeshOptions): PaperMesh {
           const hoverFold = options.cornerLift
             * Math.pow(smoothstep(0.58, 1, u), 2)
             * Math.pow(smoothstep(0.5, 1, v), 2);
-          x -= movingSide * hoverFold * 0.06;
-          y += hoverFold * 0.045;
-          z += hoverFold * 0.085;
+          x -= movingSide * hoverFold * 0.085;
+          y += hoverFold * 0.065;
+          z += hoverFold * 0.12;
         }
         previousAngle = tangentAngle;
       }
