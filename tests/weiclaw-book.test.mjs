@@ -86,6 +86,10 @@ test("models the physical book body in Blender instead of a photographic shell",
   assert.match(renderScript, /weiclaw-book\.blend/);
   assert.match(renderScript, /--spread-start/);
   assert.match(renderScript, /--physical-pages/);
+  assert.match(renderScript, /--front-page/);
+  assert.match(renderScript, /--back-page/);
+  assert.match(renderScript, /Backfacing/);
+  assert.match(renderScript, /add_page_uvs/);
   assert.match(renderScript, /spread-\{SPREAD_START:04d\}/);
   assert.match(renderScript, /Page_\{index \+ 1:03d\}/);
   assert.match(renderScript, /pose_page_stack/);

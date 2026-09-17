@@ -16,10 +16,17 @@ DOM overlay prints content on top of the static spread.
 Usage:
   blender -b public/models/weiclaw-book.blend -P scripts/render-weiclaw-book-turn.py -- \
       [--out-root public/sequence/weiclaw-turn] [--spread-start 0] [--spread-count 5] \
-      [--physical-pages 24] [--frames 41] [--test]
+      [--physical-pages 24] [--frames 41] [--test] \
+      [--front-page public/images/weiclaw/prints/page-02.png \
+       --back-page public/images/weiclaw/prints/page-03.png]
 
 Use --out for an exact legacy output directory; otherwise frames are written to
 <out-root>/spread-XXXX/frame-XXXX.webp.
+
+--front-page/--back-page print the turning sheet with the DOM page captures
+(transparent PNGs over the paper base). The front print is the right page of
+this spread, the back print the left page of the next spread; the back print is
+sampled mirrored on U so it reads correctly once the leaf lands on the left.
 """
 
 import math
@@ -38,6 +45,8 @@ SPREAD_STEP = 2
 PHYSICAL_PAGES = 24
 FRAME_COUNT = 41
 TEST_MODE = False
+FRONT_PAGE = None
+BACK_PAGE = None
 if "--out-root" in argv:
     OUT_ROOT = argv[argv.index("--out-root") + 1]
 if "--out" in argv:
@@ -50,6 +59,10 @@ if "--physical-pages" in argv:
     PHYSICAL_PAGES = int(argv[argv.index("--physical-pages") + 1])
 if "--frames" in argv:
     FRAME_COUNT = int(argv[argv.index("--frames") + 1])
+if "--front-page" in argv:
+    FRONT_PAGE = argv[argv.index("--front-page") + 1]
+if "--back-page" in argv:
+    BACK_PAGE = argv[argv.index("--back-page") + 1]
 if "--test" in argv:
     TEST_MODE = True
 if "--debug" in argv:
@@ -290,6 +303,72 @@ def make_paper_material(name, color):
     return material
 
 
+def make_printed_turning_material(name, color, front_path, back_path):
+    """Paper base with the DOM page prints alpha-composited on both sides.
+
+    The back print is sampled mirrored on U so the verso reads correctly once
+    the leaf lands on the left stack (the mesh flips around the spine axis).
+    """
+    material = bpy.data.materials.new(name)
+    material.use_nodes = True
+    bsdf = principled_node(material)
+    socket(bsdf, "Roughness").default_value = 0.94
+    nodes = material.node_tree.nodes
+    links = material.node_tree.links
+
+    uv_front = nodes.new("ShaderNodeUVMap")
+    front_tex = nodes.new("ShaderNodeTexImage")
+    front_tex.image = bpy.data.images.load(front_path)
+    links.new(uv_front.outputs[0], front_tex.inputs[0])
+
+    uv_back = nodes.new("ShaderNodeUVMap")
+    mirror = nodes.new("ShaderNodeMapping")
+    mirror.inputs["Location"].default_value = (1.0, 0.0, 0.0)
+    mirror.inputs["Scale"].default_value = (-1.0, 1.0, 1.0)
+    back_tex = nodes.new("ShaderNodeTexImage")
+    back_tex.image = bpy.data.images.load(back_path)
+    links.new(uv_back.outputs[0], mirror.inputs[0])
+    links.new(mirror.outputs[0], back_tex.inputs[0])
+
+    paper = (*color, 1.0)
+    mix_front = nodes.new("ShaderNodeMixRGB")
+    mix_front.inputs[1].default_value = paper
+    links.new(front_tex.outputs["Alpha"], mix_front.inputs[0])
+    links.new(front_tex.outputs["Color"], mix_front.inputs[2])
+    mix_back = nodes.new("ShaderNodeMixRGB")
+    mix_back.inputs[1].default_value = paper
+    links.new(back_tex.outputs["Alpha"], mix_back.inputs[0])
+    links.new(back_tex.outputs["Color"], mix_back.inputs[2])
+
+    geometry = nodes.new("ShaderNodeNewGeometry")
+    choose = nodes.new("ShaderNodeMixRGB")
+    links.new(geometry.outputs["Backfacing"], choose.inputs[0])
+    links.new(mix_front.outputs[0], choose.inputs[1])
+    links.new(mix_back.outputs[0], choose.inputs[2])
+    links.new(choose.outputs[0], socket(bsdf, "Base Color"))
+
+    if os.path.exists(fiber_path):
+        texture = nodes.new("ShaderNodeTexImage")
+        texture.image = bpy.data.images.load(fiber_path)
+        bump = nodes.new("ShaderNodeBump")
+        socket(bump, "Strength").default_value = 0.12
+        socket(bump, "Distance").default_value = 0.02
+        links.new(texture.outputs[0], socket(bump, "Height"))
+        links.new(bump.outputs[0], socket(bsdf, "Normal"))
+    return material
+
+
+def add_page_uvs(obj, columns, rows):
+    """UV (u, 1-v) so prints sit upright with u=0 at the spine."""
+    layer = obj.data.uv_layers.new(name="PageUV")
+    for poly in obj.data.polygons:
+        for loop_index in poly.loop_indices:
+            vertex_index = obj.data.loops[loop_index].vertex_index
+            row = vertex_index // (columns + 1)
+            column = vertex_index % (columns + 1)
+            layer.data[loop_index].uv = (column / columns, 1.0 - row / rows)
+
+
 paper_mat = make_paper_material("weiclaw_paper", (0.965, 0.933, 0.855))
 
 # Stacks rest on the cover's top surface (z = -0.09) and reach just under the
@@ -350,7 +429,23 @@ pose_page_stack(0)
 settled_left, _, _ = build_grid_object("SettledLeft", SETTLED_COLUMNS, SETTLED_ROWS, "left", "settled", paper_mat)
 settled_right, _, _ = build_grid_object("SettledRight", SETTLED_COLUMNS, SETTLED_ROWS, "right", "settled", paper_mat)
 turning, turning_points_at, turning_faces = None, None, None
-turning, _, _ = build_grid_object("TurningPage", TURNING_COLUMNS, TURNING_ROWS, "right", "turning", paper_mat)
+PRINTS_READY = (
+    HAS_TURN
+    and FRONT_PAGE is not None
+    and BACK_PAGE is not None
+    and os.path.exists(FRONT_PAGE)
+    and os.path.exists(BACK_PAGE)
+)
+if HAS_TURN and (FRONT_PAGE or BACK_PAGE) and not PRINTS_READY:
+    raise RuntimeError(f"turning-page prints not found: front={FRONT_PAGE} back={BACK_PAGE}")
+turning_mat = paper_mat
+if PRINTS_READY:
+    turning_mat = make_printed_turning_material(
+        "weiclaw_paper_printed", (0.965, 0.933, 0.855), FRONT_PAGE, BACK_PAGE
+    )
+turning, _, _ = build_grid_object("TurningPage", TURNING_COLUMNS, TURNING_ROWS, "right", "turning", turning_mat)
+if PRINTS_READY:
+    add_page_uvs(turning, TURNING_COLUMNS, TURNING_ROWS)
 for obj in (settled_left, settled_right, turning):
     obj.parent = book_empty
     obj.matrix_parent_inverse = book_empty.matrix_world.inverted()

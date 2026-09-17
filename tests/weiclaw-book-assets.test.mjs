@@ -27,3 +27,13 @@ for (const page of ["dashboard", "chat", "customer", "agent", "settings"]) {
     assert.ok(metadata.height >= 560, `expected ${page} artwork height >= 560px, got ${metadata.height}`);
   });
 }
+
+for (const page of ["01", "02", "03", "04", "05"]) {
+  test(`ships a transparent ${page} page print for the turning sheet`, async () => {
+    const metadata = await readAsset(`public/images/weiclaw/prints/page-${page}.png`);
+
+    assert.equal(metadata.hasAlpha, true);
+    assert.ok(metadata.width >= 500, `expected ${page} print width >= 500px, got ${metadata.width}`);
+    assert.ok(metadata.height >= 800, `expected ${page} print height >= 800px, got ${metadata.height}`);
+  });
+}

@@ -34,6 +34,17 @@ blender -b public/models/weiclaw-book.blend -P scripts/build-weiclaw-book-pages.
 blender -b public/models/weiclaw-book.blend -P scripts/render-weiclaw-book-turn.py -- --spread-start 0
 ```
 
+The flying page carries the same content the DOM overlay prints: `public/images/weiclaw/prints/page-XX.png` are transparent captures of each DOM page, composited onto the turning sheet's front (right page of the spread) and back (left page of the next spread, mirrored on U so the verso reads correctly). Pass them per spread:
+
+```bash
+blender -b public/models/weiclaw-book.blend -P scripts/render-weiclaw-book-turn.py -- \
+    --spread-start 0 \
+    --front-page public/images/weiclaw/prints/page-02.png \
+    --back-page public/images/weiclaw/prints/page-03.png
+```
+
+Recapture the prints after changing page content or page CSS: hide the background layers and the book canvas in devtools, then screenshot each `.weiclaw-book__leaf` at 2x with a transparent background.
+
 ## Hosting configuration
 
 `.openai/hosting.json` contains a safe placeholder instead of the production site identifier. Replace it only when connecting this source to a new Sites project.
