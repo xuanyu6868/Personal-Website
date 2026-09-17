@@ -64,7 +64,7 @@ def gaussian(value, center, radius):
 
 
 def settled_depth(u, v):
-    spine_dip = -0.058 * gaussian(u, 0, 0.33)
+    spine_dip = -0.075 * gaussian(u, 0, 0.33)
     inner_crest = 0.055 * gaussian(u, 0.3, 0.29)
     broad_arc = 0.012 * smoothstep(0.2, 1, u) ** 1.8
     outer_lift = 0.026 * smoothstep(0.66, 1, u) ** 1.5
@@ -218,6 +218,20 @@ if cover is not None:
     keep_world = cover.matrix_world.copy()
     cover.parent = rig
     cover.matrix_world = keep_world
+    # Hardcover silhouette: wider, darker shell with a beveled lip so the
+    # pages sit visibly inside the cover.
+    cover.scale = (2.26 / cover.dimensions.x, 1.52 / cover.dimensions.y, 1.0)
+    for modifier in list(cover.modifiers):
+        if modifier.type == "BEVEL":
+            cover.modifiers.remove(modifier)
+    bevel = cover.modifiers.new("Bevel", "BEVEL")
+    bevel.width = 0.012
+    bevel.segments = 2
+    cover_mat = cover.data.materials[0] if cover.data.materials else None
+    if cover_mat is not None and cover_mat.use_nodes:
+        cover_bsdf = principled_node(cover_mat)
+        if cover_bsdf is not None:
+            cover_bsdf.inputs["Base Color"].default_value = (0.135, 0.098, 0.072, 1.0)
 
 # ------------------------------------------------------------- rig runtime
 script_dir = os.path.dirname(os.path.abspath(__file__))

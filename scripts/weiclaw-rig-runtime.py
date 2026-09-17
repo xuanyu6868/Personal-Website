@@ -49,7 +49,7 @@ def gaussian(value, center, radius):
 
 
 def settled_depth(u, v):
-    spine_dip = -0.058 * gaussian(u, 0, 0.33)
+    spine_dip = -0.075 * gaussian(u, 0, 0.33)
     inner_crest = 0.055 * gaussian(u, 0.3, 0.29)
     broad_arc = 0.012 * smoothstep(0.2, 1, u) ** 1.8
     outer_lift = 0.026 * smoothstep(0.66, 1, u) ** 1.5

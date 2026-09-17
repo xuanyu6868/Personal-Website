@@ -112,7 +112,7 @@ def gaussian(value, center, radius):
 
 
 def settled_depth(u, v):
-    spine_dip = -0.058 * gaussian(u, 0, 0.33)
+    spine_dip = -0.075 * gaussian(u, 0, 0.33)
     inner_crest = 0.055 * gaussian(u, 0.3, 0.29)
     broad_arc = 0.012 * smoothstep(0.2, 1, u) ** 1.8
     outer_lift = 0.026 * smoothstep(0.66, 1, u) ** 1.5
@@ -264,6 +264,28 @@ cover = bpy.data.objects["Cover"]
 block = bpy.data.objects.get("PageBlock")
 if block is not None:
     bpy.data.objects.remove(block, do_unlink=True)
+
+# Give the book a real hardcover silhouette: a wider, darker cover with a
+# beveled lip so the pages sit visibly inside the shell.
+COVER_WIDTH_TARGET = 2.26
+COVER_HEIGHT_TARGET = 1.52
+COVER_COLOR = (0.135, 0.098, 0.072)
+cover.scale = (
+    COVER_WIDTH_TARGET / cover.dimensions.x,
+    COVER_HEIGHT_TARGET / cover.dimensions.y,
+    1.0,
+)
+for modifier in list(cover.modifiers):
+    if modifier.type == "BEVEL":
+        cover.modifiers.remove(modifier)
+cover_bevel = cover.modifiers.new("Bevel", "BEVEL")
+cover_bevel.width = 0.012
+cover_bevel.segments = 2
+cover_mat = cover.data.materials[0] if cover.data.materials else None
+if cover_mat is not None and cover_mat.use_nodes:
+    cover_bsdf = next((n for n in cover_mat.node_tree.nodes if n.type == "BSDF_PRINCIPLED"), None)
+    if cover_bsdf is not None:
+        cover_bsdf.inputs["Base Color"].default_value = (*COVER_COLOR, 1.0)
 cover.parent = book_empty
 cover.matrix_parent_inverse = book_empty.matrix_world.inverted()
 
@@ -376,7 +398,8 @@ paper_mat = make_paper_material("weiclaw_paper", (0.965, 0.933, 0.855))
 PAGE_STACK_THICKNESS = 0.004
 PAGE_STACK_GAP = 0.0066
 PAGE_STACK_BASE_Z = -0.081
-stack_mat = make_paper_material("weiclaw_page_stack", (0.88, 0.84, 0.76))
+# Slightly deeper tone than the open pages so the fore-edge reads as a block.
+stack_mat = make_paper_material("weiclaw_page_stack", (0.78, 0.735, 0.655))
 stack_pages = []
 for index in range(PHYSICAL_PAGES):
     bpy.ops.mesh.primitive_cube_add(location=(0.5, 0.0, 0.0))
