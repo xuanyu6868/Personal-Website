@@ -18,8 +18,16 @@ const stylesheet = await readFile(
   new URL("../app/globals.css", import.meta.url),
   "utf8",
 );
-const paperMeshSource = await readFile(
-  new URL("../components/weiclaw/WeiClawPaperMesh.tsx", import.meta.url),
+const sequenceSource = await readFile(
+  new URL("../components/weiclaw/WeiClawBookSequence.tsx", import.meta.url),
+  "utf8",
+);
+const turnSource = await readFile(
+  new URL("../components/weiclaw/sequenceTurn.ts", import.meta.url),
+  "utf8",
+);
+const renderScript = await readFile(
+  new URL("../scripts/render-weiclaw-book-turn.py", import.meta.url),
   "utf8",
 );
 const designSource = `${componentSource}\n${stylesheet}`;
@@ -55,43 +63,49 @@ test("supports pointer drag, edge click, pointer capture, and snap thresholds", 
   assert.match(componentSource, /onClick=\{\(event\) => \{ event\.stopPropagation\(\); onOpen\(page\); \}\}/);
 });
 
-test("renders settled and turning content through the deformable paper mesh", () => {
-  assert.match(componentSource, /import WeiClawPaperMesh from "\.\/weiclaw\/WeiClawPaperMesh"/);
-  assert.match(componentSource, /<WeiClawPaperMesh/);
-  assert.match(componentSource, /turningFrontPage=\{turnFrontPage\}/);
-  assert.match(componentSource, /turningBackPage=\{turnBackPage\}/);
-  assert.match(componentSource, /underPage=\{underPage\}/);
+test("plays the prerendered turn sequence under the DOM spread", () => {
+  assert.match(componentSource, /import WeiClawBookSequence from "\.\/weiclaw\/WeiClawBookSequence"/);
+  assert.match(componentSource, /<WeiClawBookSequence/);
+  assert.match(componentSource, /direction=\{dragDirection\}/);
+  assert.match(componentSource, /progress=\{dragProgress\}/);
+  assert.match(componentSource, /spreadStart=\{spreadStart\}/);
+  assert.match(sequenceSource, /sequence\/weiclaw-turn\/spread-/);
+  assert.match(sequenceSource, /resolveSequenceSpread/);
+  assert.match(turnSource, /TURN_FRAME_COUNT = 41/);
+  assert.match(turnSource, /resolveSequenceSpread/);
+  assert.match(turnSource, /spreadStart - SPREAD_STEP/);
+  assert.match(turnSource, /turn\.direction === "previous" \? lastFrame - forwardFrame : forwardFrame/);
   assert.match(designSource, /perspective/);
   assert.doesNotMatch(componentSource, /weiclaw-book__turning-sheet/);
 });
 
-test("builds the physical silhouette from the photographic shell and full page leaves", () => {
-  assert.match(componentSource, /book-shell\.png/);
-  assert.match(componentSource, /weiclaw-book__gutter/);
-  assert.match(componentSource, /WeiClawPaperMesh/);
-  assert.match(stylesheet, /\.weiclaw-book__shell[^}]*object-fit:contain/);
-  assert.match(stylesheet, /\.weiclaw-book__gutter[^}]*linear-gradient/);
-  assert.doesNotMatch(componentSource, /Array\.from\(\{ length: 14/);
+test("models the physical book body in Blender instead of a photographic shell", () => {
+  assert.doesNotMatch(componentSource, /book-shell\.png/);
+  assert.doesNotMatch(componentSource, /book-page-stack\.png/);
+  assert.doesNotMatch(componentSource, /weiclaw-book__gutter/);
+  assert.match(renderScript, /weiclaw-book\.blend/);
+  assert.match(renderScript, /--spread-start/);
+  assert.match(renderScript, /--physical-pages/);
+  assert.match(renderScript, /spread-\{SPREAD_START:04d\}/);
+  assert.match(renderScript, /Page_\{index \+ 1:03d\}/);
+  assert.match(renderScript, /pose_page_stack/);
+  assert.match(renderScript, /bpy\.data\.objects\.remove\(block, do_unlink=True\)/);
+  assert.match(renderScript, /frame-\{frame_index:04d\}\.webp/);
+  assert.match(renderScript, /film_transparent = True/);
+  assert.match(renderScript, /paper_positions\(TURNING_COLUMNS/);
+  assert.match(stylesheet, /\.weiclaw-book__canvas\s*\{[^}]*position:absolute/);
 });
 
-test("keeps the settled book normal without a baked or separate curl asset", () => {
-  assert.doesNotMatch(componentSource, /page-curl-v2\.png/);
-  assert.doesNotMatch(componentSource, /reference-book-01-clean\.png/);
-  assert.doesNotMatch(componentSource, /weiclaw-book__page-curl/);
-  assert.doesNotMatch(componentSource, /showReferenceSpread/);
-});
-
-test("passes distinct front, back, and under-page textures to the mesh", () => {
-  assert.match(componentSource, /turningFrontPage=\{turnFrontPage\}/);
-  assert.match(componentSource, /turningBackPage=\{turnBackPage\}/);
-  assert.match(componentSource, /underPage=\{underPage\}/);
-  assert.match(componentSource, /direction=\{dragDirection\}/);
-  assert.match(componentSource, /progress=\{dragProgress\}/);
+test("reveals under-pages and veils covered pages while the sequence turns", () => {
+  assert.match(componentSource, /weiclaw-book__page--under/);
+  assert.match(componentSource, /is-veiled/);
+  assert.match(componentSource, /resolveActiveTurn/);
   assert.match(componentSource, /const nextSpreadRight = weiclawBookPages\[spreadStart \+ 3\] \?\? null/);
-  assert.match(paperMeshSource, /underPage: WeiClawBookPage \| null/);
+  assert.match(componentSource, /turnLiftSide/);
+  assert.match(componentSource, /turnLandSide/);
 });
 
-test("animates completion and return from the released mesh progress", () => {
+test("animates completion and return from the released sequence progress", () => {
   assert.match(componentSource, /TURN_RETURN_DURATION/);
   assert.match(componentSource, /animatePaperProgress/);
   assert.match(componentSource, /const returnPage/);
@@ -112,11 +126,14 @@ test("places a concise Chinese page-turn cue beside the book", () => {
   assert.match(stylesheet, /\.weiclaw-book__status\s*\{[^}]*font-size:(?:9|10)px/);
 });
 
-test("layers the paper canvas inside the shell without rigid flip CSS", () => {
-  assert.match(stylesheet, /\.weiclaw-book__paper-canvas\s*\{[^}]*position:absolute/);
-  assert.match(stylesheet, /\.weiclaw-book__paper-canvas\s*\{[^}]*pointer-events:none/);
-  assert.match(stylesheet, /\.weiclaw-book\.is-mesh-ready \.weiclaw-book__spread/);
+test("layers the sequence canvas beneath the DOM spread without clip-path switching", () => {
+  assert.match(stylesheet, /\.weiclaw-book__canvas\s*\{[^}]*position:absolute/);
+  assert.match(stylesheet, /\.weiclaw-book__canvas\s*\{[^}]*pointer-events:none/);
+  assert.doesNotMatch(stylesheet, /\.weiclaw-book__canvas\s*\{[^}]*clip-path/);
+  assert.match(stylesheet, /\.weiclaw-book\.is-sequence-ready\s+\.weiclaw-book__canvas/);
   assert.match(stylesheet, /\.weiclaw-book__semantic-pages/);
+  assert.match(stylesheet, /\.weiclaw-book__page--under/);
+  assert.match(stylesheet, /\.weiclaw-book__leaf\.is-veiled/);
   assert.doesNotMatch(stylesheet, /\.weiclaw-book__turning-sheet/);
   assert.doesNotMatch(stylesheet, /\.weiclaw-book__under-page/);
 });
@@ -129,6 +146,6 @@ test("does not install a wheel handler for the book and honors reduced motion", 
   assert.match(componentSource, /removeEventListener/);
 });
 
-test("preserves the photographic shell registration on narrow screens", () => {
+test("preserves the book framing on narrow screens", () => {
   assert.doesNotMatch(stylesheet, /@media \(max-width:560px\)[\s\S]*?\.weiclaw-book\s*\{[^}]*aspect-ratio:1\.28/);
 });

@@ -11,7 +11,8 @@ import {
 import { useReducedMotion } from "framer-motion";
 import Image from "next/image";
 import { weiclawBookPages, type WeiClawBookPage } from "../data/weiclaw-book";
-import WeiClawPaperMesh from "./weiclaw/WeiClawPaperMesh";
+import WeiClawBookSequence from "./weiclaw/WeiClawBookSequence";
+import { resolveActiveTurn } from "./weiclaw/sequenceTurn";
 import {
   animatePaperProgress,
   shouldCompletePaperTurn,
@@ -52,17 +53,23 @@ function BookPage({
   page,
   side,
   onOpen,
+  under = false,
+  visible = false,
 }: {
   page: WeiClawBookPage | null;
   side: "left" | "right";
   onOpen: (page: WeiClawBookPage) => void;
+  under?: boolean;
+  visible?: boolean;
 }) {
   if (!page) return <div className={`weiclaw-book__page weiclaw-book__page--blank weiclaw-book__page--${side}`} />;
 
   return (
     <button
       type="button"
-      className={`weiclaw-book__page ${pageClass(page)} weiclaw-book__page--${side}`}
+      tabIndex={under ? -1 : undefined}
+      aria-hidden={under || undefined}
+      className={`weiclaw-book__page ${pageClass(page)} weiclaw-book__page--${side}${under ? " weiclaw-book__page--under" : ""}${under && visible ? " is-visible" : ""}`}
       onClick={(event) => { event.stopPropagation(); onOpen(page); }}
       aria-label={`Open ${page.title.replace("\n", " ")} preview`}
     >
@@ -93,20 +100,29 @@ export default function WeiClawBook() {
   const [hoverEdge, setHoverEdge] = useState<TurnDirection | null>(null);
   const [previewPage, setPreviewPage] = useState<WeiClawBookPage | null>(null);
   const [parallax, setParallax] = useState({ x: 0, y: 0 });
-  const [meshReady, setMeshReady] = useState(false);
+  const [sequenceReady, setSequenceReady] = useState(false);
 
   const currentPage = weiclawBookPages[spreadStart] ?? weiclawBookPages[0];
   const nextPage = weiclawBookPages[spreadStart + 1] ?? null;
-  const nextSpreadLeft = weiclawBookPages[spreadStart + 2] ?? nextPage ?? currentPage;
   const nextSpreadRight = weiclawBookPages[spreadStart + 3] ?? null;
-  const previousSpreadLeft = weiclawBookPages[Math.max(0, spreadStart - 2)] ?? currentPage;
-  const previousSpreadRight = weiclawBookPages[Math.max(0, spreadStart - 1)] ?? currentPage;
-  const activePaperDirection = dragDirection ?? hoverEdge;
-  const turnFrontPage = activePaperDirection === "previous" ? currentPage : nextPage;
-  const turnBackPage = activePaperDirection === "previous" ? previousSpreadRight : nextSpreadLeft;
-  const underPage = activePaperDirection === "previous" ? previousSpreadLeft : nextSpreadRight;
+  const previousSpreadLeft = weiclawBookPages[Math.max(0, spreadStart - 2)] ?? null;
   const canGoPrevious = spreadStart > 0;
   const canGoNext = spreadStart + 2 < weiclawBookPages.length;
+  const hoverLift = hoverEdge && !dragDirection && !reduceMotion ? 1 : 0;
+  const activeTurn = resolveActiveTurn({
+    direction: dragDirection,
+    hoverDirection: hoverEdge,
+    progress: dragProgress,
+    hoverLift,
+    reducedMotion: Boolean(reduceMotion),
+    spreadStart,
+  });
+  const turnLiftSide = activeTurn.direction === "next" ? "right" : activeTurn.direction === "previous" ? "left" : null;
+  const turnLandSide = activeTurn.direction === "next" ? "left" : activeTurn.direction === "previous" ? "right" : null;
+  const underRevealed = turnLiftSide !== null && activeTurn.progress > 0.02;
+  const landVeiled = turnLandSide !== null && activeTurn.progress > 0.7;
+  const leftVeiled = (turnLiftSide === "left" && underRevealed) || (turnLandSide === "left" && landVeiled);
+  const rightVeiled = (turnLiftSide === "right" && underRevealed) || (turnLandSide === "right" && landVeiled);
 
   const setProgress = (value: number) => {
     const nextProgress = clamp(value);
@@ -261,6 +277,15 @@ export default function WeiClawBook() {
     setPreviewPage(page);
   };
 
+  const onBookClick = (event: ReactMouseEvent<HTMLDivElement>) => {
+    if (!sequenceReady || movedRef.current || suppressClickRef.current) return;
+    if ((event.target as HTMLElement).closest("button")) return;
+    const rect = bookRef.current?.getBoundingClientRect();
+    if (!rect) return;
+    const page = event.clientX < rect.left + rect.width / 2 ? currentPage : nextPage;
+    if (page) setPreviewPage(page);
+  };
+
   const onEdgeClick = (event: ReactMouseEvent<HTMLButtonElement>, direction: TurnDirection) => {
     if (suppressClickRef.current) {
       event.preventDefault();
@@ -307,59 +332,38 @@ export default function WeiClawBook() {
         onPointerLeave={() => { if (!dragRef.current) { setHoverEdge(null); setParallax({ x: 0, y: 0 }); } }}
       >
         <div
-          className={`weiclaw-book${meshReady ? " is-mesh-ready" : ""}${dragDirection ? ` is-turn-active is-turn-${dragDirection}` : ""}${dragging ? " is-dragging-turn" : ""}${returning ? " is-returning-turn" : ""}`}
+          className={`weiclaw-book${sequenceReady ? " is-sequence-ready" : ""}${dragDirection ? ` is-turn-active is-turn-${dragDirection}` : ""}${dragging ? " is-dragging-turn" : ""}${returning ? " is-returning-turn" : ""}`}
           ref={bookRef}
           style={bookStyle}
           onPointerMove={onPointerMove}
           onPointerUp={onPointerUp}
           onPointerCancel={onPointerCancel}
+          onClick={onBookClick}
         >
-          <span className="weiclaw-book__shadow" aria-hidden="true" />
-          <Image
-            className="weiclaw-book__shell"
-            src="/images/weiclaw/book/book-shell.png"
-            alt=""
-            fill
-            sizes="min(105vw, 1025px)"
-            priority
-            unoptimized
-            draggable={false}
-            aria-hidden="true"
-          />
-
           <div className="weiclaw-book__spread">
-            <div className={`weiclaw-book__leaf weiclaw-book__leaf--left${dragDirection === "previous" ? " is-dragging" : ""}`} onPointerDown={(event) => onPointerDown(event, "previous")}>
+            <div className={`weiclaw-book__leaf weiclaw-book__leaf--left${dragDirection === "previous" ? " is-dragging" : ""}${leftVeiled ? " is-veiled" : ""}`} onPointerDown={(event) => onPointerDown(event, "previous")}>
               <BookPage page={currentPage} side="left" onOpen={openPreview} />
+              {previousSpreadLeft && (
+                <BookPage page={previousSpreadLeft} side="left" onOpen={openPreview} under visible={turnLiftSide === "left" && underRevealed} />
+              )}
             </div>
-            <div className={`weiclaw-book__leaf weiclaw-book__leaf--right${dragDirection === "next" ? " is-dragging" : ""}`} onPointerDown={(event) => onPointerDown(event, "next")}>
+            <div className={`weiclaw-book__leaf weiclaw-book__leaf--right${dragDirection === "next" ? " is-dragging" : ""}${rightVeiled ? " is-veiled" : ""}`} onPointerDown={(event) => onPointerDown(event, "next")}>
               <BookPage page={nextPage} side="right" onOpen={openPreview} />
+              {nextSpreadRight && (
+                <BookPage page={nextSpreadRight} side="right" onOpen={openPreview} under visible={turnLiftSide === "right" && underRevealed} />
+              )}
             </div>
           </div>
 
-          <WeiClawPaperMesh
-            leftPage={currentPage}
-            rightPage={nextPage}
-            underPage={underPage}
-            turningFrontPage={turnFrontPage}
-            turningBackPage={turnBackPage}
+          <WeiClawBookSequence
             direction={dragDirection}
             hoverDirection={hoverEdge}
             progress={dragProgress}
-            hoverLift={hoverEdge && !dragDirection && !reduceMotion ? 1 : 0}
+            hoverLift={hoverLift}
             reducedMotion={Boolean(reduceMotion)}
-            onReady={setMeshReady}
+            spreadStart={spreadStart}
+            onReady={setSequenceReady}
           />
-          <Image
-            className="weiclaw-book__page-stack"
-            src="/images/weiclaw/book/book-page-stack.png"
-            alt=""
-            fill
-            sizes="min(105vw, 1025px)"
-            unoptimized
-            draggable={false}
-            aria-hidden="true"
-          />
-          <span className="weiclaw-book__gutter" aria-hidden="true" />
 
           <div className="weiclaw-book__semantic-pages" aria-live="polite">
             <span>{currentPage.number} {currentPage.type} {currentPage.title.replace("\n", " ")} {currentPage.description}</span>

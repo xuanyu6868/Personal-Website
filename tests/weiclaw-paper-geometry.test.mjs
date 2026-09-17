@@ -18,6 +18,16 @@ function distance(a, b) {
   return Math.hypot(a[0] - b[0], a[1] - b[1], a[2] - b[2]);
 }
 
+function assertArraysClose(actual, expected, tolerance = 1e-6) {
+  assert.equal(actual.length, expected.length);
+  for (let index = 0; index < actual.length; index += 1) {
+    assert.ok(
+      Math.abs(actual[index] - expected[index]) <= tolerance,
+      `value ${index} differed: ${actual[index]} versus ${expected[index]}`,
+    );
+  }
+}
+
 test("anchors the spine throughout a next-page turn", () => {
   const start = createPaperMesh({
     ...options,
@@ -91,6 +101,26 @@ test("keeps a visible curl instead of becoming a rigid board late in the turn", 
   assert.ok(Math.abs(middle[2] - linearDepth) > 0.085, "late-turn sheet should retain a curved ridge");
 });
 
+test("carries a reference-like vertical twist into the moving sheet", () => {
+  const settled = createPaperMesh({
+    ...options,
+    side: "right",
+    mode: "settled",
+    progress: 0,
+  });
+  const turning = createPaperMesh({
+    ...options,
+    side: "right",
+    mode: "turning",
+    direction: "next",
+    progress: 0.5,
+  });
+  const settledSilhouette = position(settled, 40, 0)[1] - position(settled, 40, 16)[1];
+  const turningSilhouette = position(turning, 40, 0)[1] - position(turning, 40, 16)[1];
+
+  assert.ok(Math.abs(turningSilhouette - settledSilhouette) > 0.004);
+});
+
 test("lags top and bottom corners behind the page center", () => {
   const mesh = createPaperMesh({
     ...options,
@@ -129,6 +159,26 @@ test("settles on opposite sides and mirrors previous-page turns", () => {
   assert.ok(Math.abs(position(nextEnd, 40)[0] + position(previousEnd, 40)[0]) < 0.02);
 });
 
+test("matches settled geometry and sampled UVs at both page-turn boundaries", () => {
+  for (const direction of ["next", "previous"]) {
+    const startSide = direction === "next" ? "right" : "left";
+    const endSide = direction === "next" ? "left" : "right";
+    const settledStart = createPaperMesh({ ...options, side: startSide, mode: "settled", progress: 0 });
+    const settledEnd = createPaperMesh({ ...options, side: endSide, mode: "settled", progress: 0 });
+    const turnStart = createPaperMesh({ ...options, side: startSide, mode: "turning", direction, progress: 0 });
+    const turnEnd = createPaperMesh({ ...options, side: startSide, mode: "turning", direction, progress: 1 });
+
+    assertArraysClose(turnStart.positions, settledStart.positions);
+    assertArraysClose(turnStart.normals, settledStart.normals);
+    assertArraysClose(turnStart.uvs, settledStart.uvs);
+    assertArraysClose(turnEnd.positions, settledEnd.positions);
+    assertArraysClose(turnEnd.normals, settledEnd.normals);
+
+    const sampledBackUvs = Array.from(turnEnd.uvs, (value, index) => index % 2 === 0 ? 1 - value : value);
+    assertArraysClose(sampledBackUvs, settledEnd.uvs);
+  }
+});
+
 test("maps both settled page textures in normal reading order", () => {
   const left = createPaperMesh({
     ...options,
@@ -154,6 +204,24 @@ test("maps both settled page textures in normal reading order", () => {
   assert.equal(rightOuterU, 1, "right page outer edge should show the texture's right edge");
 });
 
+test("compresses the printed inner quarter toward the gutter without shrinking the fore edge", () => {
+  const mesh = createPaperMesh({
+    ...options,
+    side: "right",
+    mode: "settled",
+    progress: 0,
+  });
+
+  const spineX = position(mesh, 0)[0];
+  const innerQuarter = position(mesh, 10)[0] - spineX;
+  const outerQuarter = position(mesh, 40)[0] - position(mesh, 30)[0];
+  const foreEdge = position(mesh, 40)[0];
+
+  assert.ok(innerQuarter >= 0.215 && innerQuarter <= 0.23, `inner content compression was ${innerQuarter}`);
+  assert.ok(outerQuarter > innerQuarter * 1.08, "the page should ease out of the compressed gutter region");
+  assert.ok(foreEdge >= 0.98 && foreEdge <= 1.02, "gutter compression must not visibly shrink the whole page");
+});
+
 test("shapes settled page boundaries like an open book instead of rectangles", () => {
   const mesh = createPaperMesh({
     ...options,
@@ -173,7 +241,7 @@ test("shapes settled page boundaries like an open book instead of rectangles", (
   assert.ok(bottomSpine < bottomOuter - 0.008, "bottom edge should dip gently into the binding");
 });
 
-test("keeps the settled sheet stiff outside the broad gutter valley", () => {
+test("gives the settled sheet a soft gutter curve with a gentle outer arc", () => {
   const mesh = createPaperMesh({
     ...options,
     side: "right",
@@ -181,14 +249,15 @@ test("keeps the settled sheet stiff outside the broad gutter valley", () => {
     progress: 0,
   });
   const allDepths = [0, 4, 8, 12, 16, 20, 24, 28, 32, 36, 40].map((column) => position(mesh, column)[2]);
-  const bodyDepths = [14, 18, 22, 26, 30, 34, 38, 40].map((column) => position(mesh, column)[2]);
+  const bodyDepths = [20, 24, 28, 32, 36, 40].map((column) => position(mesh, column)[2]);
 
   const fullRange = Math.max(...allDepths) - Math.min(...allDepths);
   const bodyRange = Math.max(...bodyDepths) - Math.min(...bodyDepths);
 
-  assert.ok(fullRange > 0.052, "the settled mesh silhouette should visibly read as open paper without shader AO");
-  assert.ok(fullRange < 0.08, "settled paper should not return to the previous cloth-like wave");
-  assert.ok(bodyRange < 0.026, "the page body should stay comparatively stiff outside the gutter");
+  assert.ok(fullRange > 0.06, "the settled mesh should visibly curve the printed surface");
+  assert.ok(fullRange < 0.13, "settled paper should remain a bound sheet rather than a loose cloth wave");
+  assert.ok(bodyRange > 0.02, "the outer half should arc gently toward the fore edge");
+  assert.ok(bodyRange < 0.045, "the outer-half arc should stay subtle");
 });
 
 test("forms a wide continuous gutter valley without a hard hinge", () => {
@@ -203,10 +272,10 @@ test("forms a wide continuous gutter valley without a hard hinge", () => {
 
   assert.ok(gutterDepths[0] < gutterDepths[2]);
   assert.ok(gutterDepths[2] < gutterDepths[4]);
-  assert.ok(Math.max(...adjacentChanges.map(Math.abs)) < 0.019, "gutter should transition gradually across several columns");
+  assert.ok(Math.max(...adjacentChanges.map(Math.abs)) < 0.03, "gutter should transition gradually across several columns");
 });
 
-test("keeps the settled bottom edge firm instead of cloth-like", () => {
+test("bends the settled bottom edge into the binding without becoming cloth-like", () => {
   const mesh = createPaperMesh({
     ...options,
     side: "right",
@@ -215,7 +284,9 @@ test("keeps the settled bottom edge firm instead of cloth-like", () => {
   });
   const lowerBody = [12, 16, 20, 24, 28, 32, 36, 40].map((column) => position(mesh, column, 16)[1]);
 
-  assert.ok(Math.max(...lowerBody) - Math.min(...lowerBody) < 0.022, "bottom edge should not undulate like soft fabric");
+  const bend = Math.max(...lowerBody) - Math.min(...lowerBody);
+  assert.ok(bend > 0.028, "bottom edge should visibly follow the bound-page silhouette");
+  assert.ok(bend < 0.05, "bottom edge should keep one broad bend instead of undulating like soft fabric");
 });
 
 test("forms a continuous thick-book cross-section while settled", () => {
@@ -227,13 +298,13 @@ test("forms a continuous thick-book cross-section while settled", () => {
   });
 
   const spine = position(mesh, 0)[2];
-  const innerCrest = position(mesh, 6)[2];
-  const middleFall = position(mesh, 23)[2];
+  const innerCrest = position(mesh, 10)[2];
+  const middleFall = position(mesh, 30)[2];
   const outerLift = position(mesh, 40)[2];
 
-  assert.ok(spine < -0.025, "the sheet geometry should settle visibly into the binding without relying on AO");
-  assert.ok(innerCrest > middleFall + 0.022, "the inner sheet stack should crest before easing into the body");
-  assert.ok(outerLift > middleFall + 0.01, "the fore edge should lift subtly after the calm middle section");
+  assert.ok(spine < -0.028, "the sheet should settle into the binding without a deep trench");
+  assert.ok(innerCrest > spine + 0.05, "the sheet should rise out of the gutter into a soft crest");
+  assert.ok(outerLift > middleFall + 0.015, "the fore edge should lift gently after the calm middle section");
 });
 
 test("breaks the perfectly straight settled fore edge", () => {

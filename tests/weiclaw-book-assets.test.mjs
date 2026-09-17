@@ -12,15 +12,7 @@ async function readAsset(relativePath) {
   return sharp(absolutePath).metadata();
 }
 
-test("ships a high-resolution transparent photographic book shell", async () => {
-  const metadata = await readAsset("public/images/weiclaw/book/book-shell.png");
-
-  assert.ok(metadata.width >= 1400, `expected shell width >= 1400px, got ${metadata.width}`);
-  assert.ok(metadata.height >= 800, `expected shell height >= 800px, got ${metadata.height}`);
-  assert.equal(metadata.hasAlpha, true, "book shell must preserve a transparent background");
-});
-
-test("ships a high-resolution photographic fiber texture for every printed page", async () => {
+test("ships a high-resolution photographic fiber texture for the cover and printed pages", async () => {
   const metadata = await readAsset("public/images/weiclaw/book/paper-fiber-v2.png");
 
   assert.ok(metadata.width >= 1200, `expected paper texture width >= 1200px, got ${metadata.width}`);

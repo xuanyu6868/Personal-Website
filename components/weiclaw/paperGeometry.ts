@@ -1,4 +1,6 @@
-import type { PageSide } from "./pageTextureLayout";
+import { resolvePaperTurnPose } from "./paperTurnPose.ts";
+
+export type PageSide = "left" | "right";
 
 export type TurnDirection = "next" | "previous";
 export type PaperMode = "settled" | "turning";
@@ -13,6 +15,8 @@ export type PaperMeshOptions = {
   direction?: TurnDirection;
   progress: number;
   cornerLift?: number;
+  curveIntensity?: number;
+  settleScale?: number;
 };
 
 export type PaperMesh = {
@@ -79,19 +83,22 @@ const gaussian = (value: number, center: number, radius: number) =>
   Math.exp(-Math.pow((value - center) / radius, 2));
 
 const settledDepth = (u: number, v: number) => {
-  const spineDip = -0.038 * gaussian(u, 0, 0.17);
-  const innerCrest = 0.042 * gaussian(u, 0.21, 0.17);
-  const middleFall = -0.005 * gaussian(u, 0.57, 0.34);
-  const outerLift = 0.012 * Math.pow(smoothstep(0.79, 1, u), 1.85);
-  const verticalBow = 0.003 * (1 - Math.pow((v - 0.49) * 2, 2));
-  const pageTwist = 0.0012 * Math.sin(Math.PI * v) * (u - 0.42);
-  return spineDip + innerCrest + middleFall + outerLift + verticalBow + pageTwist;
+  const spineDip = -0.058 * gaussian(u, 0, 0.33);
+  const innerCrest = 0.055 * gaussian(u, 0.3, 0.29);
+  const broadArc = 0.012 * Math.pow(smoothstep(0.2, 1, u), 1.8);
+  const outerLift = 0.026 * Math.pow(smoothstep(0.66, 1, u), 1.5);
+  const verticalBow = 0.004 * (1 - Math.pow((v - 0.49) * 2, 2));
+  const pageTwist = 0.0016 * Math.sin(Math.PI * v) * (u - 0.42);
+  return spineDip + innerCrest + broadArc + outerLift + verticalBow + pageTwist;
 };
+
+const settledHorizontal = (u: number) =>
+  u - 0.04 * Math.sin(Math.PI * u) * (1 - 0.35 * u);
 
 const openBookBoundaryOffset = (u: number, v: number) => {
   const arch = Math.sin(Math.PI * u);
-  const topOffset = 0.019 * (1 - u) + 0.023 * arch;
-  const bottomOffset = -0.017 * (1 - u) - 0.0055 * arch;
+  const topOffset = 0.024 * (1 - u) + 0.028 * arch;
+  const bottomOffset = -0.031 * (1 - u) - 0.011 * arch;
   const edgeRipple = (0.00022 * Math.sin(u * Math.PI * 5.4) + 0.00012 * Math.sin(u * Math.PI * 11.3))
     * Math.pow(u, 0.8)
     * (v < 0.5 ? 1 : -0.65);
@@ -155,11 +162,15 @@ export function createPaperMesh(options: PaperMeshOptions): PaperMesh {
   const width = Math.max(Number.EPSILON, options.width);
   const height = Math.max(Number.EPSILON, options.height);
   const progress = clamp(options.progress);
+  const settleScale = options.settleScale ?? 1;
   const positions = new Float32Array((columns + 1) * (rows + 1) * 3);
   const uvs = new Float32Array((columns + 1) * (rows + 1) * 2);
   const settledSign = options.side === "right" ? 1 : -1;
   const direction = options.direction ?? (options.side === "right" ? "next" : "previous");
   const initialSign = direction === "next" ? 1 : -1;
+  const turnPose = options.mode === "turning"
+    ? resolvePaperTurnPose(progress, direction, options.curveIntensity ?? 1)
+    : null;
   const delta = width / columns;
 
   for (let row = 0; row <= rows; row += 1) {
@@ -174,14 +185,14 @@ export function createPaperMesh(options: PaperMeshOptions): PaperMesh {
     for (let column = 0; column <= columns; column += 1) {
       const u = column / columns;
       const offset = positionOffset(columns, column, row);
-      let x = settledSign * width * u;
+      let x = settledSign * width * settledHorizontal(u);
       let y = baseY
-        + openBookBoundaryOffset(u, v)
-        + cornerDroop * Math.pow(smoothstep(0.76, 1, u), 2);
-      let z = settledDepth(u, v);
+        + openBookBoundaryOffset(u, v) * settleScale
+        + cornerDroop * Math.pow(smoothstep(0.76, 1, u), 2) * settleScale;
+      let z = settledDepth(u, v) * settleScale;
 
       if (options.mode === "settled") {
-        x += settledSign * foreEdgeOffset(u, v);
+        x += settledSign * foreEdgeOffset(u, v) * settleScale;
       }
 
       if (options.mode === "turning") {
@@ -193,7 +204,17 @@ export function createPaperMesh(options: PaperMeshOptions): PaperMesh {
           ? 1
           : smoothstep(propagationDelay, 0.98 + cornerDelay * 0.15, progress);
         const curlPulse = Math.sin(Math.PI * progress) * Math.sin(Math.PI * u);
-        const tangentAngle = Math.PI * localProgress + curlPulse * 0.52;
+        const referenceBend = turnPose?.bend ?? 0;
+        const referenceTwist = turnPose?.twist ?? 0;
+        const referenceCurve = turnPose?.curveIntensity ?? 0;
+        const bendWave = referenceBend
+          * Math.sin(Math.PI * localProgress)
+          * Math.sin(Math.PI * u)
+          * 0.96;
+        const curveWave = Math.sin(Math.PI * progress)
+          * (0.08 + Math.abs(referenceCurve) * 0.12)
+          * Math.sin(Math.PI * u);
+        const tangentAngle = Math.PI * localProgress + curlPulse * 0.52 + bendWave + curveWave;
 
         if (column > 0) {
           const midAngle = (previousAngle + tangentAngle) * 0.5;
@@ -203,8 +224,13 @@ export function createPaperMesh(options: PaperMeshOptions): PaperMesh {
 
         x = integratedX;
         const movingSide = Math.cos(Math.PI * progress) >= 0 ? initialSign : -initialSign;
+        const settledCompression = width * (settledHorizontal(u) - u) * settleScale * Math.abs(Math.cos(Math.PI * progress));
+        x += movingSide * settledCompression;
         x += movingSide * foreEdgeOffset(u, v);
         z += integratedZ + Math.sin(Math.PI * u) * Math.sin(Math.PI * progress) * 0.055;
+        y += initialSign * referenceTwist * (v - 0.5)
+          * (0.72 * u + 0.28 * Math.sin(Math.PI * u))
+          * 0.16;
         if (options.cornerLift) {
           const hoverFold = options.cornerLift
             * Math.pow(smoothstep(0.58, 1, u), 2)
