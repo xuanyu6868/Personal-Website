@@ -36,3 +36,6 @@ tsconfig.tsbuildinfo
 .vscode/
 *.swp
 *.swo
+
+# Local backups (QA screenshots, old blend states)
+/.backups/
