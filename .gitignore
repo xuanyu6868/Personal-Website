@@ -39,3 +39,6 @@ tsconfig.tsbuildinfo
 
 # Local backups (QA screenshots, old blend states)
 /.backups/
+
+# Blender rolling backups
+*.blend1
