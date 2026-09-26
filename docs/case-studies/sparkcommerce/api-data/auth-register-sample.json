@@ -1,0 +1,15 @@
+{
+  "status": 201,
+  "body": {
+    "message": "注册成功",
+    "user": {
+      "id": "cmu9vsbke0000gt4hl2kbyf03",
+      "email": "audit_1789912665149@example.com",
+      "name": "Audit Bot",
+      "role": "USER",
+      "tier": "FREE",
+      "credits": 0
+    },
+    "token": "<redacted>"
+  }
+}

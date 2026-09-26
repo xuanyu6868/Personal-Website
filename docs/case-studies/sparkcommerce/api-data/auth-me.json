@@ -1,0 +1,14 @@
+{
+  "user": {
+    "id": "cmu9une220000gtzkez26espr",
+    "email": "casebook@example.com",
+    "name": "CaseBook",
+    "avatar": null,
+    "bio": null,
+    "role": "USER",
+    "tier": "FREE",
+    "credits": 0,
+    "totalCredits": 0,
+    "createdAt": "2026-09-20T13:25:55.563Z"
+  }
+}

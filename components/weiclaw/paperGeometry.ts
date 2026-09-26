@@ -83,22 +83,24 @@ const gaussian = (value: number, center: number, radius: number) =>
   Math.exp(-Math.pow((value - center) / radius, 2));
 
 const settledDepth = (u: number, v: number) => {
-  const spineDip = -0.058 * gaussian(u, 0, 0.33);
-  const innerCrest = 0.055 * gaussian(u, 0.3, 0.29);
-  const broadArc = 0.012 * Math.pow(smoothstep(0.2, 1, u), 1.8);
-  const outerLift = 0.026 * Math.pow(smoothstep(0.66, 1, u), 1.5);
-  const verticalBow = 0.004 * (1 - Math.pow((v - 0.49) * 2, 2));
-  const pageTwist = 0.0016 * Math.sin(Math.PI * v) * (u - 0.42);
-  return spineDip + innerCrest + broadArc + outerLift + verticalBow + pageTwist;
+  // Pressed-open hardcover profile: a deep narrow gutter at the spine, the
+  // page rising onto a flat plateau, then draping slightly at the fore-edge.
+  const gutter = -0.095 * gaussian(u, 0, 0.17);
+  const rise = 0.075 * Math.pow(smoothstep(0.03, 0.45, u), 1.15);
+  const drape = -0.02 * Math.pow(smoothstep(0.58, 1, u), 1.7);
+  const crown = 0.0032 * (1 - Math.pow((v - 0.49) * 2, 2));
+  const twist = 0.0014 * Math.sin(Math.PI * v) * (u - 0.42);
+  return gutter + rise + drape + crown + twist;
 };
 
 const settledHorizontal = (u: number) =>
   u - 0.04 * Math.sin(Math.PI * u) * (1 - 0.35 * u);
 
 const openBookBoundaryOffset = (u: number, v: number) => {
-  const arch = Math.sin(Math.PI * u);
-  const topOffset = 0.024 * (1 - u) + 0.028 * arch;
-  const bottomOffset = -0.031 * (1 - u) - 0.011 * arch;
+  // Nearly straight top/bottom edges with a slight sag toward the fore-edge.
+  const sag = 0.007 * Math.pow(smoothstep(0.45, 1, u), 1.4);
+  const topOffset = -sag;
+  const bottomOffset = sag;
   const edgeRipple = (0.00022 * Math.sin(u * Math.PI * 5.4) + 0.00012 * Math.sin(u * Math.PI * 11.3))
     * Math.pow(u, 0.8)
     * (v < 0.5 ? 1 : -0.65);
@@ -106,12 +108,11 @@ const openBookBoundaryOffset = (u: number, v: number) => {
 };
 
 const foreEdgeOffset = (u: number, v: number) => {
-  const edgeInfluence = Math.pow(smoothstep(0.66, 1, u), 2);
-  const centered = v - 0.48;
-  const broadBow = 0.0022 * (1 - 4 * centered * centered);
-  const cornerInset = -0.0026 * Math.pow(Math.abs(v - 0.5) * 2, 5);
-  const handmadeVariation = 0.00048 * Math.sin(v * Math.PI * 3.2) - 0.00042 * v;
-  return edgeInfluence * (broadBow + cornerInset + handmadeVariation);
+  const edgeInfluence = Math.pow(smoothstep(0.7, 1, u), 2);
+  const centered = v - 0.5;
+  const broadBow = 0.0018 * (1 - 4 * centered * centered);
+  const cornerInset = -0.005 * Math.pow(Math.abs(v - 0.5) * 2, 6);
+  return edgeInfluence * (broadBow + cornerInset);
 };
 
 function createIndices(columns: number, rows: number) {
@@ -176,7 +177,7 @@ export function createPaperMesh(options: PaperMeshOptions): PaperMesh {
   for (let row = 0; row <= rows; row += 1) {
     const v = row / rows;
     const cornerDistance = Math.abs(v - 0.5) * 2;
-    const cornerDroop = Math.pow(cornerDistance, 5) * (v < 0.5 ? -0.0035 : 0.0025);
+    const cornerDroop = Math.pow(cornerDistance, 6) * (v < 0.5 ? -0.008 : 0.008);
     const baseY = (0.5 - v) * height;
     let integratedX = 0;
     let integratedZ = 0;

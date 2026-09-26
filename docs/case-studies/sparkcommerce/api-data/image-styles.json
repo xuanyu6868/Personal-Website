@@ -1,0 +1,7 @@
+{
+  "status": 404,
+  "body": {
+    "error": "图片不存在",
+    "stack": "Error: 图片不存在\n    at createError (/Users/xuanyumacbook/Sparkcommerce-ai/server/src/shared/middlewares/errorHandler.ts:31:17)\n    at <anonymous> (/Users/xuanyumacbook/Sparkcommerce-ai/server/src/modules/image/image.routes.ts:166:13)"
+  }
+}

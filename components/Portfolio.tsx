@@ -1,23 +1,25 @@
 "use client";
 
-import { useEffect, useRef, useState, type PointerEvent } from "react";
+import { Fragment, useEffect, useRef, useState, type PointerEvent } from "react";
 import {
   motion,
   useReducedMotion,
   useScroll,
   useTransform,
+  type MotionValue,
 } from "framer-motion";
+import { createPortal } from "react-dom";
 import { capabilities } from "../data/capabilities";
+import { renderMarkdown } from "../lib/simple-markdown";
 import { projects, type Project, type ProjectVisual as VisualType } from "../data/projects";
 import NoteSyncGallery from "./NoteSyncGallery";
 import WeiClawBook from "./WeiClawBook";
+import SparkCommerceBelt from "./SparkCommerceBelt";
 
 const EASE = [0.22, 1, 0.36, 1] as const;
 
 const SCENE_CAPABILITIES_INDEX = String(4 + projects.length).padStart(2, "0");
 const SCENE_CONTACT_INDEX = String(5 + projects.length).padStart(2, "0");
-
-const INK_STAMP_COUNT = 32;
 
 const FRAME_COUNT = 815;
 const FRAME_WIDTH = 1920;
@@ -72,323 +74,6 @@ declare global {
   }
 }
 
-const portraitVertexShader = `
-  attribute vec2 aPosition;
-  varying vec2 vUv;
-  void main() {
-    vUv = aPosition * 0.5 + 0.5;
-    gl_Position = vec4(aPosition, 0.0, 1.0);
-  }
-`;
-
-const portraitFragmentShader = `
-  precision highp float;
-  varying vec2 vUv;
-  uniform sampler2D uPortrait;
-  uniform sampler2D uSpider;
-  uniform vec4 uInkStamps[32];
-  uniform float uInkAges[32];
-  uniform float uAspect;
-  uniform float uTextureAspect;
-
-  float hash(vec2 point) {
-    return fract(sin(dot(point, vec2(127.1, 311.7))) * 43758.5453123);
-  }
-
-  float noise(vec2 point) {
-    vec2 cell = floor(point);
-    vec2 position = fract(point);
-    position = position * position * (3.0 - 2.0 * position);
-    return mix(
-      mix(hash(cell), hash(cell + vec2(1.0, 0.0)), position.x),
-      mix(hash(cell + vec2(0.0, 1.0)), hash(cell + vec2(1.0, 1.0)), position.x),
-      position.y
-    );
-  }
-
-  float brushMark(vec2 point, vec2 stamp, vec2 direction, float age, float seed) {
-    vec2 delta = (point - stamp) * vec2(uAspect, 1.0);
-    vec2 normal = vec2(-direction.y, direction.x);
-    float along = dot(delta, direction);
-    float across = abs(dot(delta, normal));
-    float tail = smoothstep(-0.098, -0.079, along);
-    float tip = 1.0 - smoothstep(0.020, 0.038, along);
-    float taper = mix(0.030, 0.006, smoothstep(-0.060, 0.031, along));
-    float edgeNoise = mix(0.78, 1.18, noise(vec2(along * 91.0, across * 212.0 + seed)));
-    float body = 1.0 - smoothstep(taper * 0.68 * edgeNoise, taper * edgeNoise, across);
-    float paperGap = noise(vec2(along * 168.0 + seed, across * 420.0));
-    float bristle = mix(0.52, 1.0, smoothstep(0.18, 0.72, paperGap));
-    float bleed = (1.0 - smoothstep(taper * 1.03, taper * 1.48, across)) * 0.16;
-    float fade = 1.0 - smoothstep(0.12, 1.55, age);
-    return max(body * tail * tip * bristle, bleed * tail * tip) * fade;
-  }
-
-  void main() {
-    vec2 textureUv = vUv;
-    if (uAspect < uTextureAspect) {
-      float imageHeight = uAspect / uTextureAspect;
-      textureUv.y = vUv.y / imageHeight;
-    } else {
-      float imageWidth = uTextureAspect / uAspect;
-      textureUv.x = (vUv.x - (1.0 - imageWidth) * 0.5) / imageWidth;
-    }
-    if (textureUv.x < 0.0 || textureUv.x > 1.0 || textureUv.y < 0.0 || textureUv.y > 1.0) {
-      gl_FragColor = vec4(0.0);
-      return;
-    }
-    float reveal = 0.0;
-    for (int index = 0; index < 32; index++) {
-      vec4 ink = uInkStamps[index];
-      vec2 direction = normalize(ink.zw + vec2(0.0001, 0.0));
-      reveal = max(reveal, brushMark(vUv, ink.xy, direction, uInkAges[index], float(index) * 7.13));
-    }
-    vec4 portrait = texture2D(uPortrait, textureUv);
-    vec4 spider = texture2D(uSpider, textureUv);
-    gl_FragColor = mix(spider, portrait, reveal);
-  }
-`;
-
-function InteractivePortrait() {
-  const canvasRef = useRef<HTMLCanvasElement>(null);
-
-  useEffect(() => {
-    const canvas = canvasRef.current;
-    const gl = canvas?.getContext("webgl", { alpha: true, antialias: true, premultipliedAlpha: true });
-    if (!canvas || !gl) return;
-
-    let animationFrame = 0;
-    let destroyed = false;
-    let program: WebGLProgram | null = null;
-    let portraitTexture: WebGLTexture | null = null;
-    let spiderTexture: WebGLTexture | null = null;
-    let positionBuffer: WebGLBuffer | null = null;
-    let vertexShader: WebGLShader | null = null;
-    let fragmentShader: WebGLShader | null = null;
-    const brushDirection = { x: 1, y: 0 };
-    const inkStamps = new Float32Array(INK_STAMP_COUNT * 4);
-    const inkBirthTimes = new Float64Array(INK_STAMP_COUNT);
-    let stampCursor = 0;
-    let lastPointer = { x: -2, y: -2 };
-    let lastStamp = { x: -2, y: -2 };
-    for (let index = 0; index < INK_STAMP_COUNT; index += 1) {
-      inkStamps[index * 4] = -2;
-      inkStamps[index * 4 + 1] = -2;
-      inkStamps[index * 4 + 2] = 1;
-      inkStamps[index * 4 + 3] = 0;
-      inkBirthTimes[index] = -100;
-    }
-
-    const compileShader = (type: number, source: string) => {
-      const shader = gl.createShader(type);
-      if (!shader) throw new Error("Unable to create portrait shader");
-      gl.shaderSource(shader, source);
-      gl.compileShader(shader);
-      if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)) {
-        const message = gl.getShaderInfoLog(shader);
-        gl.deleteShader(shader);
-        throw new Error(message ?? "Unable to compile portrait shader");
-      }
-      return shader;
-    };
-
-    const loadImage = (source: string) => new Promise<HTMLImageElement>((resolve, reject) => {
-      const image = new Image();
-      image.decoding = "async";
-      image.onload = () => resolve(image);
-      image.onerror = () => reject(new Error(`Unable to load ${source}`));
-      image.src = source;
-    });
-
-    const createTexture = (image: HTMLImageElement) => {
-      const texture = gl.createTexture();
-      if (!texture) throw new Error("Unable to create portrait texture");
-      gl.bindTexture(gl.TEXTURE_2D, texture);
-      gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, true);
-      gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, true);
-      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
-      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
-      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
-      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
-      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, image);
-      return texture;
-    };
-
-    let viewportAspect = 1;
-    let resizeObserver: ResizeObserver | null = null;
-    let visibilityObserver: IntersectionObserver | null = null;
-    let render: (() => void) | null = null;
-    let isVisible = true;
-    let hasActiveStamps = false;
-    let needsRender = true;
-    const scheduleRender = () => {
-      if (render && isVisible && animationFrame === 0) {
-        animationFrame = window.requestAnimationFrame(render);
-      }
-    };
-    const resizeCanvas = () => {
-      const rect = canvas.getBoundingClientRect();
-      const pixelRatio = Math.min(window.devicePixelRatio || 1, 2);
-      const width = Math.max(1, Math.round(rect.width * pixelRatio));
-      const height = Math.max(1, Math.round(rect.height * pixelRatio));
-      if (canvas.width !== width || canvas.height !== height) {
-        canvas.width = width;
-        canvas.height = height;
-      }
-      gl.viewport(0, 0, width, height);
-      viewportAspect = rect.width > 0 && rect.height > 0 ? rect.width / rect.height : 1;
-      needsRender = true;
-      scheduleRender();
-    };
-    if ("ResizeObserver" in window) {
-      resizeObserver = new ResizeObserver(() => resizeCanvas());
-      resizeObserver.observe(canvas);
-    }
-    visibilityObserver = new IntersectionObserver(
-      ([entry]) => {
-        isVisible = entry.isIntersecting;
-        if (isVisible && (needsRender || hasActiveStamps)) scheduleRender();
-      },
-      { rootMargin: "50% 0px 50% 0px", threshold: 0.01 },
-    );
-    visibilityObserver.observe(canvas);
-    resizeCanvas();
-
-    const addInkStamp = (point: { x: number; y: number }) => {
-      const offset = stampCursor * 4;
-      inkStamps[offset] = point.x;
-      inkStamps[offset + 1] = point.y;
-      inkStamps[offset + 2] = brushDirection.x;
-      inkStamps[offset + 3] = brushDirection.y;
-      inkBirthTimes[stampCursor] = performance.now() / 1000;
-      stampCursor = (stampCursor + 1) % INK_STAMP_COUNT;
-      lastStamp = point;
-      hasActiveStamps = true;
-      needsRender = true;
-      scheduleRender();
-    };
-
-    const onPointerMove = (event: globalThis.PointerEvent) => {
-      const rect = canvas.getBoundingClientRect();
-      const nextPointer = {
-        x: (event.clientX - rect.left) / rect.width,
-        y: 1 - (event.clientY - rect.top) / rect.height,
-      };
-      if (lastPointer.x > -1) {
-        const deltaX = (nextPointer.x - lastPointer.x) * (rect.width / rect.height);
-        const deltaY = nextPointer.y - lastPointer.y;
-        const length = Math.hypot(deltaX, deltaY);
-        if (length > 0.002) {
-          brushDirection.x = deltaX / length;
-          brushDirection.y = deltaY / length;
-        }
-      }
-      const stampDistance = Math.hypot(
-        (nextPointer.x - lastStamp.x) * (rect.width / rect.height),
-        nextPointer.y - lastStamp.y,
-      );
-      if (lastStamp.x < -1 || stampDistance > 0.014) addInkStamp(nextPointer);
-      lastPointer = nextPointer;
-    };
-    canvas.addEventListener("pointermove", onPointerMove);
-
-    void Promise.all([loadImage("/profile/xuanyu-portrait.png"), loadImage("/profile/xuanyu-spiderman-clean.png")])
-      .then(([portraitImage, spiderImage]) => {
-        if (destroyed) return;
-        vertexShader = compileShader(gl.VERTEX_SHADER, portraitVertexShader);
-        fragmentShader = compileShader(gl.FRAGMENT_SHADER, portraitFragmentShader);
-        program = gl.createProgram();
-        if (!program) throw new Error("Unable to create portrait program");
-        gl.attachShader(program, vertexShader);
-        gl.attachShader(program, fragmentShader);
-        gl.linkProgram(program);
-        gl.deleteShader(vertexShader);
-        gl.deleteShader(fragmentShader);
-        vertexShader = null;
-        fragmentShader = null;
-        if (!gl.getProgramParameter(program, gl.LINK_STATUS)) {
-          throw new Error(gl.getProgramInfoLog(program) ?? "Unable to link portrait program");
-        }
-
-        positionBuffer = gl.createBuffer();
-        if (!positionBuffer) throw new Error("Unable to create portrait geometry");
-        gl.bindBuffer(gl.ARRAY_BUFFER, positionBuffer);
-        gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 1, -1, -1, 1, -1, 1, 1, -1, 1, 1]), gl.STATIC_DRAW);
-        portraitTexture = createTexture(portraitImage);
-        spiderTexture = createTexture(spiderImage);
-        gl.useProgram(program);
-        gl.bindBuffer(gl.ARRAY_BUFFER, positionBuffer);
-        const positionLocation = gl.getAttribLocation(program, "aPosition");
-        gl.enableVertexAttribArray(positionLocation);
-        gl.vertexAttribPointer(positionLocation, 2, gl.FLOAT, false, 0, 0);
-        gl.uniform1i(gl.getUniformLocation(program, "uPortrait"), 0);
-        gl.uniform1i(gl.getUniformLocation(program, "uSpider"), 1);
-
-        const aspectLocation = gl.getUniformLocation(program, "uAspect");
-        const textureAspectLocation = gl.getUniformLocation(program, "uTextureAspect");
-        const inkStampsLocation = gl.getUniformLocation(program, "uInkStamps[0]");
-        const inkAgesLocation = gl.getUniformLocation(program, "uInkAges[0]");
-        const inkAges = new Float32Array(INK_STAMP_COUNT);
-        gl.clearColor(0, 0, 0, 0);
-
-        const textureAspect = portraitImage.naturalWidth / portraitImage.naturalHeight;
-        render = () => {
-          const currentRender = render;
-          if (destroyed || !currentRender || !program || !portraitTexture || !spiderTexture) return;
-          const aspect = viewportAspect;
-          const now = performance.now() / 1000;
-          let anyActiveStamps = false;
-          for (let index = 0; index < INK_STAMP_COUNT; index += 1) {
-            inkAges[index] = now - inkBirthTimes[index];
-            if (inkAges[index] < 1.55) anyActiveStamps = true;
-          }
-          hasActiveStamps = anyActiveStamps;
-          gl.clear(gl.COLOR_BUFFER_BIT);
-          gl.useProgram(program);
-          gl.activeTexture(gl.TEXTURE0);
-          gl.bindTexture(gl.TEXTURE_2D, portraitTexture);
-          gl.activeTexture(gl.TEXTURE1);
-          gl.bindTexture(gl.TEXTURE_2D, spiderTexture);
-          gl.uniform4fv(inkStampsLocation, inkStamps);
-          gl.uniform1fv(inkAgesLocation, inkAges);
-          gl.uniform1f(aspectLocation, aspect);
-          gl.uniform1f(textureAspectLocation, textureAspect);
-          gl.drawArrays(gl.TRIANGLES, 0, 6);
-          const shouldContinue = needsRender || (isVisible && hasActiveStamps);
-          needsRender = false;
-          animationFrame = 0;
-          if (shouldContinue) {
-            animationFrame = window.requestAnimationFrame(currentRender);
-          }
-        };
-        render();
-      })
-      .catch(() => {
-        // The visible fallback image remains available if WebGL is unavailable.
-      });
-
-    return () => {
-      destroyed = true;
-      window.cancelAnimationFrame(animationFrame);
-      resizeObserver?.disconnect();
-      visibilityObserver?.disconnect();
-      canvas.removeEventListener("pointermove", onPointerMove);
-      if (portraitTexture) gl.deleteTexture(portraitTexture);
-      if (spiderTexture) gl.deleteTexture(spiderTexture);
-      if (positionBuffer) gl.deleteBuffer(positionBuffer);
-      if (vertexShader) gl.deleteShader(vertexShader);
-      if (fragmentShader) gl.deleteShader(fragmentShader);
-      if (program) gl.deleteProgram(program);
-    };
-  }, []);
-
-  return (
-    <div className="portrait__interactive" aria-label="Interactive portrait: move the cursor to reveal Xuanyu">
-      <img className="portrait__fallback" src="/profile/xuanyu-spiderman-clean.png" alt="Spider-Man styled portrait of Xuanyu" />
-      <canvas className="portrait__canvas" ref={canvasRef} aria-hidden="true" />
-      <div className="portrait__hint" aria-hidden="true">BRUSH TO REVEAL</div>
-    </div>
-  );
-}
 
 function ScrollFrameSequence() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -1240,11 +925,726 @@ function Hero() {
   );
 }
 
+/**
+ * 猫的 3D 模型：Blender 预渲染的 180 帧透明背景转盘动画
+ * （360° 自转 + 呼吸 + 头部微动 + 尾巴摆动），canvas 循环播放，
+ * 支持按住拖动来手动旋转。三个页面实例共享同一帧缓存。
+ */
+const CAT_FRAME_COUNT = 180;
+const CAT_FRAME_SIZE = 720;
+const CAT_FRAME_MS = 1000 / 18;
+const CAT_DRAG_FRAMES_PER_PX = 0.4;
+const catFrameSrc = (i: number) =>
+  `/models/cat-idle/f_${String(i + 1).padStart(3, "0")}.webp`;
+
+const catFrameCache: (HTMLImageElement | null)[] = new Array(
+  CAT_FRAME_COUNT,
+).fill(null);
+let catFramesStarted = false;
+let catInstanceSeed = 0;
+
+function ensureCatFrames() {
+  if (catFramesStarted) return;
+  catFramesStarted = true;
+  let next = 0;
+  const worker = async () => {
+    while (next < CAT_FRAME_COUNT) {
+      const i = next++;
+      const img = new Image();
+      img.src = catFrameSrc(i);
+      try {
+        await img.decode();
+        catFrameCache[i] = img;
+      } catch {
+        /* 单帧失败就跳过，播放器会自动用邻近帧 */
+      }
+    }
+  };
+  for (let k = 0; k < 6; k++) void worker();
+}
+
+function CatModel({ className = "" }: { className?: string }) {
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const reducedMotion = useReducedMotion();
+
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    const ctx = canvas?.getContext("2d");
+    if (!canvas || !ctx) return;
+    canvas.width = CAT_FRAME_SIZE;
+    canvas.height = CAT_FRAME_SIZE;
+
+    ensureCatFrames();
+
+    let raf = 0;
+    let lastDrawn = -1;
+    let last = performance.now();
+    let frameFloat = (catInstanceSeed++ * 37) % CAT_FRAME_COUNT;
+    let dragging = false;
+    let dragStartX = 0;
+    let dragStartFrame = 0;
+
+    const tick = (now: number) => {
+      const dt = now - last;
+      last = now;
+      if (!dragging && !reducedMotion) {
+        frameFloat = (frameFloat + dt / CAT_FRAME_MS) % CAT_FRAME_COUNT;
+      }
+      const idx = Math.floor(frameFloat) % CAT_FRAME_COUNT;
+      // 目标帧还没加载好就回退到最近的已加载帧
+      for (let k = 0; k < CAT_FRAME_COUNT; k++) {
+        const cand = (idx - k + CAT_FRAME_COUNT) % CAT_FRAME_COUNT;
+        const img = catFrameCache[cand];
+        if (img) {
+          if (cand !== lastDrawn) {
+            ctx.clearRect(0, 0, CAT_FRAME_SIZE, CAT_FRAME_SIZE);
+            ctx.drawImage(img, 0, 0, CAT_FRAME_SIZE, CAT_FRAME_SIZE);
+            lastDrawn = cand;
+          }
+          break;
+        }
+      }
+      raf = requestAnimationFrame(tick);
+    };
+
+    const onPointerDown = (e: globalThis.PointerEvent) => {
+      dragging = true;
+      dragStartX = e.clientX;
+      dragStartFrame = frameFloat;
+      canvas.setPointerCapture(e.pointerId);
+    };
+    const onPointerMove = (e: globalThis.PointerEvent) => {
+      if (!dragging) return;
+      const delta = (e.clientX - dragStartX) * CAT_DRAG_FRAMES_PER_PX;
+      frameFloat =
+        (((dragStartFrame + delta) % CAT_FRAME_COUNT) + CAT_FRAME_COUNT) %
+        CAT_FRAME_COUNT;
+    };
+    const onPointerUp = () => {
+      dragging = false;
+    };
+    canvas.addEventListener("pointerdown", onPointerDown);
+    canvas.addEventListener("pointermove", onPointerMove);
+    canvas.addEventListener("pointerup", onPointerUp);
+    canvas.addEventListener("pointercancel", onPointerUp);
+
+    const io = new IntersectionObserver(([entry]) => {
+      cancelAnimationFrame(raf);
+      if (entry.isIntersecting) raf = requestAnimationFrame(tick);
+    });
+    io.observe(canvas);
+    raf = requestAnimationFrame(tick);
+
+    return () => {
+      cancelAnimationFrame(raf);
+      io.disconnect();
+      canvas.removeEventListener("pointerdown", onPointerDown);
+      canvas.removeEventListener("pointermove", onPointerMove);
+      canvas.removeEventListener("pointerup", onPointerUp);
+      canvas.removeEventListener("pointercancel", onPointerUp);
+    };
+  }, [reducedMotion]);
+
+  return (
+    <canvas
+      ref={canvasRef}
+      className={`cat-model ${className}`}
+      role="img"
+      aria-label="禤宇的猫（银渐层 3D 模型，可拖动旋转）"
+    />
+  );
+}
+
+/*
+ * 小米 SU7 的 3D 模型：Blender 预渲染的两段透明背景帧序列——
+ * a_ 序列 150 帧：148 个真实零件由内到外的组装动画（倒放即拆解）；
+ * t_ 序列 180 帧：组装完成后的 360° 无缝转盘，支持按住拖动旋转。
+ * 滚入视口自动播放一次组装，之后进入可拖拽的转盘待机。
+ */
+const SU7_A_COUNT = 150;
+const SU7_T_COUNT = 180;
+const SU7_D_COUNT = 400;  // 甩尾入场序列（摆锤状态机仿真版，13.3s @30fps，含停稳悬挂回弹）
+const SU7_R_COUNT = 180;  // 配套转盘（r_001 == d_末帧，交接无跳变，前 12 帧吸收落点缓动）
+const SU7_ASSEMBLE_MS = 1000 / 30;
+const SU7_TURN_MS = 1000 / 30;
+const SU7_DRAG_FRAMES_PER_PX = 0.4;
+// 帧序列以同名文件覆盖更新，带版本号防止浏览器缓存旧帧
+const SU7_FRAME_VERSION = "20260925e";
+const su7FrameSrc = (kind: "a" | "t" | "d" | "r", i: number) =>
+  `/models/su7/${kind}_${String(i + 1).padStart(3, "0")}.webp?v=${SU7_FRAME_VERSION}`;
+
+const su7FramesA: (HTMLImageElement | null)[] = new Array(SU7_A_COUNT).fill(null);
+const su7FramesT: (HTMLImageElement | null)[] = new Array(SU7_T_COUNT).fill(null);
+const su7FramesD: (HTMLImageElement | null)[] = new Array(SU7_D_COUNT).fill(null);
+const su7FramesR: (HTMLImageElement | null)[] = new Array(SU7_R_COUNT).fill(null);
+let su7InstanceSeed = 0;
+const su7FrameKindsLoaded = new Set<string>();
+
+function ensureSu7Frames(drive = false) {
+  const load = async (kind: "a" | "t" | "d" | "r", cache: (HTMLImageElement | null)[], count: number) => {
+    if (su7FrameKindsLoaded.has(kind)) return;
+    su7FrameKindsLoaded.add(kind);
+    let next = 0;
+    const worker = async () => {
+      while (next < count) {
+        const i = next++;
+        const img = new Image();
+        img.src = su7FrameSrc(kind, i);
+        try {
+          await img.decode();
+          cache[i] = img;
+        } catch {
+          /* 单帧失败跳过，播放器回退到邻近帧 */
+        }
+      }
+    };
+    for (let k = 0; k < 6; k++) void worker();
+  };
+  if (drive) {
+    void load("d", su7FramesD, SU7_D_COUNT);
+    void load("r", su7FramesR, SU7_R_COUNT);
+  } else {
+    void load("a", su7FramesA, SU7_A_COUNT);
+    void load("t", su7FramesT, SU7_T_COUNT);
+  }
+}
+
+type Su7Phase = "scattered" | "assembling" | "idle" | "disassembling";
+
+function Su7Showcase({
+  className = "",
+  variant = "plain",
+  drive = false,
+}: {
+  className?: string;
+  variant?: "hero" | "plain";
+  /** 甩尾入场模式：进入视口即从头自动播放 d_ 序列（上下两个方向都会重新触发），
+   *  播完无缝切到 r_ 转盘待机 */
+  drive?: boolean;
+}) {
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const reducedMotion = useReducedMotion();
+  const [phase, setPhase] = useState<Su7Phase>(variant === "hero" ? "scattered" : "idle");
+  const apiRef = useRef<{ assemble: () => void; disassemble: () => void } | null>(null);
+
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    const ctx = canvas?.getContext("2d");
+    if (!canvas || !ctx) return;
+
+    const turnCount = drive ? SU7_R_COUNT : SU7_T_COUNT;
+    ensureSu7Frames(drive);
+
+    let raf = 0;
+    let inView = false;
+    let autoStarted = false;
+    let sized = false;
+    let mode: Su7Phase = variant === "hero" ? "scattered" : "idle";
+    let aFloat = 0;                 // 组装序列的帧位置（浮点）
+    let tFloat = drive ? 0 : (su7InstanceSeed++ * 61) % SU7_T_COUNT;  // 转盘序列的帧位置（浮点）
+    let dFloat = 0;                 // 甩尾序列的帧位置（浮点）
+    let parked = false;             // 甩尾播完、进入转盘待机
+    let last = performance.now();
+    let lastKey = "";
+    let dragging = false;
+    let dragStartX = 0;
+    let dragStartFrame = 0;
+
+    const switchMode = (m: Su7Phase) => {
+      mode = m;
+      setPhase(m);
+    };
+    apiRef.current = {
+      assemble: () => {
+        if (mode !== "scattered") return;
+        aFloat = 0;
+        switchMode("assembling");
+      },
+      disassemble: () => {
+        if (mode !== "idle") return;
+        aFloat = SU7_A_COUNT - 1;
+        switchMode("disassembling");
+      },
+    };
+
+    const drawFrom = (cache: (HTMLImageElement | null)[], idx: number) => {
+      const n = cache.length;
+      const target = ((Math.floor(idx) % n) + n) % n;
+      // 目标帧没加载好就回退到最近的已加载帧
+      for (let k = 0; k < n; k++) {
+        const cand = (target - k + n) % n;
+        const img = cache[cand];
+        if (img) {
+          const key = `${cand}:${img.src}`;
+          if (key !== lastKey) {
+            if (!sized) {
+              canvas.width = img.naturalWidth;
+              canvas.height = img.naturalHeight;
+              sized = true;
+            }
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+            lastKey = key;
+          }
+          return;
+        }
+      }
+    };
+
+    const tick = (now: number) => {
+      const dt = now - last;
+      last = now;
+      if (mode === "assembling") {
+        aFloat += dt / SU7_ASSEMBLE_MS;
+        if (aFloat >= SU7_A_COUNT - 1) {
+          tFloat = 0;
+          switchMode("idle");
+        } else {
+          drawFrom(su7FramesA, aFloat);
+        }
+      } else if (mode === "disassembling") {
+        aFloat -= dt / SU7_ASSEMBLE_MS;
+        if (aFloat <= 0) {
+          aFloat = 0;
+          switchMode("scattered");
+        }
+        drawFrom(su7FramesA, Math.max(0, aFloat));
+      } else if (mode === "idle") {
+        if (drive) {
+          if (!parked) {
+            // 入场段：按时间自动播放甩尾序列，与滚动解耦
+            if (!dragging && !reducedMotion) {
+              dFloat += dt / SU7_TURN_MS;
+            }
+            if (dFloat >= SU7_D_COUNT - 1) {
+              parked = true;
+              tFloat = 0;
+            } else {
+              drawFrom(su7FramesD, dFloat);
+            }
+          }
+          if (parked) {
+            // 停稳段：配套转盘自动旋转
+            if (!dragging && !reducedMotion) {
+              tFloat = (tFloat + dt / SU7_TURN_MS) % turnCount;
+            }
+            drawFrom(su7FramesR, tFloat);
+          }
+        } else {
+          if (!dragging && !reducedMotion) {
+            tFloat = (tFloat + dt / SU7_TURN_MS) % SU7_T_COUNT;
+          }
+          drawFrom(su7FramesT, tFloat);
+        }
+      } else {
+        drawFrom(su7FramesA, 0);
+      }
+      raf = requestAnimationFrame(tick);
+    };
+
+    const onPointerDown = (e: globalThis.PointerEvent) => {
+      if (mode !== "idle") return;
+      if (drive && !parked) return;
+      dragging = true;
+      dragStartX = e.clientX;
+      dragStartFrame = tFloat;
+      canvas.setPointerCapture(e.pointerId);
+    };
+    const onPointerMove = (e: globalThis.PointerEvent) => {
+      if (!dragging) return;
+      const delta = (e.clientX - dragStartX) * SU7_DRAG_FRAMES_PER_PX;
+      tFloat =
+        (((dragStartFrame + delta) % turnCount) + turnCount) % turnCount;
+    };
+    const onPointerUp = () => {
+      dragging = false;
+    };
+    canvas.addEventListener("pointerdown", onPointerDown);
+    canvas.addEventListener("pointermove", onPointerMove);
+    canvas.addEventListener("pointerup", onPointerUp);
+    canvas.addEventListener("pointercancel", onPointerUp);
+
+    const io = new IntersectionObserver(([entry]) => {
+      inView = entry.isIntersecting;
+      cancelAnimationFrame(raf);
+      if (inView) {
+        if (variant === "hero" && !autoStarted) {
+          autoStarted = true;
+          if (reducedMotion) {
+            switchMode("idle");
+          } else {
+            switchMode("assembling");
+          }
+        }
+        if (drive) {
+          // 每次进入视口（从上或从下）都从头重播甩尾入场
+          dFloat = 0;
+          parked = !!reducedMotion;
+        }
+        raf = requestAnimationFrame(tick);
+      }
+    }, { threshold: 0.3 });
+    io.observe(canvas);
+    raf = requestAnimationFrame(tick);
+
+    return () => {
+      cancelAnimationFrame(raf);
+      io.disconnect();
+      canvas.removeEventListener("pointerdown", onPointerDown);
+      canvas.removeEventListener("pointermove", onPointerMove);
+      canvas.removeEventListener("pointerup", onPointerUp);
+      canvas.removeEventListener("pointercancel", onPointerUp);
+    };
+  }, [reducedMotion, variant]);
+
+  return (
+    <div className={`su7-showcase ${className}`}>
+      <canvas
+        ref={canvasRef}
+        className="su7-showcase__canvas"
+        role="img"
+        aria-label="小米 SU7 3D 模型：148 个零件由内到外组装，完成后可拖动旋转"
+      />
+      {variant === "hero" && (
+        <div className="su7-showcase__controls">
+          {phase === "idle" && (
+            <button type="button" onClick={() => apiRef.current?.disassemble()}>
+              拆解
+            </button>
+          )}
+          {phase === "scattered" && (
+            <button type="button" onClick={() => apiRef.current?.assemble()}>
+              组装
+            </button>
+          )}
+          {(phase === "assembling" || phase === "disassembling") && (
+            <button type="button" disabled>
+              {phase === "assembling" ? "组装中…" : "拆解中…"}
+            </button>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+const INK_STAMP_COUNT = 32;
+
+const portraitVertexShader = `
+  attribute vec2 aPosition;
+  varying vec2 vUv;
+  void main() {
+    vUv = aPosition * 0.5 + 0.5;
+    gl_Position = vec4(aPosition, 0.0, 1.0);
+  }
+`;
+
+const portraitFragmentShader = `
+  precision highp float;
+  varying vec2 vUv;
+  uniform sampler2D uPortrait;
+  uniform sampler2D uSpider;
+  uniform vec4 uInkStamps[32];
+  uniform float uInkAges[32];
+  uniform float uAspect;
+  uniform float uTextureAspect;
+
+  float hash(vec2 point) {
+    return fract(sin(dot(point, vec2(127.1, 311.7))) * 43758.5453123);
+  }
+
+  float noise(vec2 point) {
+    vec2 cell = floor(point);
+    vec2 position = fract(point);
+    position = position * position * (3.0 - 2.0 * position);
+    return mix(
+      mix(hash(cell), hash(cell + vec2(1.0, 0.0)), position.x),
+      mix(hash(cell + vec2(0.0, 1.0)), hash(cell + vec2(1.0, 1.0)), position.x),
+      position.y
+    );
+  }
+
+  float brushMark(vec2 point, vec2 stamp, vec2 direction, float age, float seed) {
+    vec2 delta = (point - stamp) * vec2(uAspect, 1.0);
+    vec2 normal = vec2(-direction.y, direction.x);
+    float along = dot(delta, direction);
+    float across = abs(dot(delta, normal));
+    float tail = smoothstep(-0.098, -0.079, along);
+    float tip = 1.0 - smoothstep(0.020, 0.038, along);
+    float taper = mix(0.030, 0.006, smoothstep(-0.060, 0.031, along));
+    float edgeNoise = mix(0.78, 1.18, noise(vec2(along * 91.0, across * 212.0 + seed)));
+    float body = 1.0 - smoothstep(taper * 0.68 * edgeNoise, taper * edgeNoise, across);
+    float paperGap = noise(vec2(along * 168.0 + seed, across * 420.0));
+    float bristle = mix(0.52, 1.0, smoothstep(0.18, 0.72, paperGap));
+    float bleed = (1.0 - smoothstep(taper * 1.03, taper * 1.48, across)) * 0.16;
+    float fade = 1.0 - smoothstep(0.12, 1.55, age);
+    return max(body * tail * tip * bristle, bleed * tail * tip) * fade;
+  }
+
+  void main() {
+    vec2 textureUv = vUv;
+    if (uAspect < uTextureAspect) {
+      float imageHeight = uAspect / uTextureAspect;
+      textureUv.y = vUv.y / imageHeight;
+    } else {
+      float imageWidth = uTextureAspect / uAspect;
+      textureUv.x = (vUv.x - (1.0 - imageWidth) * 0.5) / imageWidth;
+    }
+    if (textureUv.x < 0.0 || textureUv.x > 1.0 || textureUv.y < 0.0 || textureUv.y > 1.0) {
+      gl_FragColor = vec4(0.0);
+      return;
+    }
+    float reveal = 0.0;
+    for (int index = 0; index < 32; index++) {
+      vec4 ink = uInkStamps[index];
+      vec2 direction = normalize(ink.zw + vec2(0.0001, 0.0));
+      reveal = max(reveal, brushMark(vUv, ink.xy, direction, uInkAges[index], float(index) * 7.13));
+    }
+    vec4 portrait = texture2D(uPortrait, textureUv);
+    vec4 spider = texture2D(uSpider, textureUv);
+    gl_FragColor = mix(spider, portrait, reveal);
+  }
+`;
+
+function InteractivePortrait() {
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    const gl = canvas?.getContext("webgl", { alpha: true, antialias: true, premultipliedAlpha: true });
+    if (!canvas || !gl) return;
+
+    let animationFrame = 0;
+    let destroyed = false;
+    let program: WebGLProgram | null = null;
+    let portraitTexture: WebGLTexture | null = null;
+    let spiderTexture: WebGLTexture | null = null;
+    const brushDirection = { x: 1, y: 0 };
+    const inkStamps = new Float32Array(INK_STAMP_COUNT * 4);
+    const inkBirthTimes = new Float64Array(INK_STAMP_COUNT);
+    let stampCursor = 0;
+    let lastPointer = { x: -2, y: -2 };
+    let lastStamp = { x: -2, y: -2 };
+    for (let index = 0; index < INK_STAMP_COUNT; index += 1) {
+      inkStamps[index * 4] = -2;
+      inkStamps[index * 4 + 1] = -2;
+      inkStamps[index * 4 + 2] = 1;
+      inkStamps[index * 4 + 3] = 0;
+      inkBirthTimes[index] = -100;
+    }
+
+    const compileShader = (type: number, source: string) => {
+      const shader = gl.createShader(type);
+      if (!shader) throw new Error("Unable to create portrait shader");
+      gl.shaderSource(shader, source);
+      gl.compileShader(shader);
+      if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)) {
+        const message = gl.getShaderInfoLog(shader);
+        gl.deleteShader(shader);
+        throw new Error(message ?? "Unable to compile portrait shader");
+      }
+      return shader;
+    };
+
+    const loadImage = (source: string) => new Promise<HTMLImageElement>((resolve, reject) => {
+      const image = new Image();
+      image.decoding = "async";
+      image.onload = () => resolve(image);
+      image.onerror = () => reject(new Error(`Unable to load ${source}`));
+      image.src = source;
+    });
+
+    const createTexture = (image: HTMLImageElement) => {
+      const texture = gl.createTexture();
+      if (!texture) throw new Error("Unable to create portrait texture");
+      gl.bindTexture(gl.TEXTURE_2D, texture);
+      gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, true);
+      gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, true);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, image);
+      return texture;
+    };
+
+    let viewportAspect = 1;
+    let resizeObserver: ResizeObserver | null = null;
+    let visibilityObserver: IntersectionObserver | null = null;
+    let render: (() => void) | null = null;
+    let isVisible = true;
+    let hasActiveStamps = false;
+    let needsRender = true;
+    const scheduleRender = () => {
+      if (render && isVisible && animationFrame === 0) {
+        animationFrame = window.requestAnimationFrame(render);
+      }
+    };
+    const resizeCanvas = () => {
+      const rect = canvas.getBoundingClientRect();
+      const pixelRatio = Math.min(window.devicePixelRatio || 1, 2);
+      const width = Math.max(1, Math.round(rect.width * pixelRatio));
+      const height = Math.max(1, Math.round(rect.height * pixelRatio));
+      if (canvas.width !== width || canvas.height !== height) {
+        canvas.width = width;
+        canvas.height = height;
+      }
+      gl.viewport(0, 0, width, height);
+      viewportAspect = rect.width > 0 && rect.height > 0 ? rect.width / rect.height : 1;
+      needsRender = true;
+      scheduleRender();
+    };
+    if ("ResizeObserver" in window) {
+      resizeObserver = new ResizeObserver(() => resizeCanvas());
+      resizeObserver.observe(canvas);
+    }
+    visibilityObserver = new IntersectionObserver(
+      ([entry]) => {
+        isVisible = entry.isIntersecting;
+        if (isVisible && (needsRender || hasActiveStamps)) scheduleRender();
+      },
+      { rootMargin: "50% 0px 50% 0px", threshold: 0.01 },
+    );
+    visibilityObserver.observe(canvas);
+    resizeCanvas();
+
+    const addInkStamp = (point: { x: number; y: number }) => {
+      const offset = stampCursor * 4;
+      inkStamps[offset] = point.x;
+      inkStamps[offset + 1] = point.y;
+      inkStamps[offset + 2] = brushDirection.x;
+      inkStamps[offset + 3] = brushDirection.y;
+      inkBirthTimes[stampCursor] = performance.now() / 1000;
+      stampCursor = (stampCursor + 1) % INK_STAMP_COUNT;
+      lastStamp = point;
+      hasActiveStamps = true;
+      needsRender = true;
+      scheduleRender();
+    };
+
+    const onPointerMove = (event: globalThis.PointerEvent) => {
+      const rect = canvas.getBoundingClientRect();
+      const nextPointer = {
+        x: (event.clientX - rect.left) / rect.width,
+        y: 1 - (event.clientY - rect.top) / rect.height,
+      };
+      if (lastPointer.x > -1) {
+        const deltaX = (nextPointer.x - lastPointer.x) * (rect.width / rect.height);
+        const deltaY = nextPointer.y - lastPointer.y;
+        const length = Math.hypot(deltaX, deltaY);
+        if (length > 0.002) {
+          brushDirection.x = deltaX / length;
+          brushDirection.y = deltaY / length;
+        }
+      }
+      const stampDistance = Math.hypot(
+        (nextPointer.x - lastStamp.x) * (rect.width / rect.height),
+        nextPointer.y - lastStamp.y,
+      );
+      if (lastStamp.x < -1 || stampDistance > 0.014) addInkStamp(nextPointer);
+      lastPointer = nextPointer;
+    };
+    canvas.addEventListener("pointermove", onPointerMove);
+
+    void Promise.all([loadImage("/profile/xuanyu-portrait.png"), loadImage("/profile/xuanyu-spiderman-clean.png")])
+      .then(([portraitImage, spiderImage]) => {
+        if (destroyed) return;
+        const vertexShader = compileShader(gl.VERTEX_SHADER, portraitVertexShader);
+        const fragmentShader = compileShader(gl.FRAGMENT_SHADER, portraitFragmentShader);
+        program = gl.createProgram();
+        if (!program) throw new Error("Unable to create portrait program");
+        gl.attachShader(program, vertexShader);
+        gl.attachShader(program, fragmentShader);
+        gl.linkProgram(program);
+        gl.deleteShader(vertexShader);
+        gl.deleteShader(fragmentShader);
+        if (!gl.getProgramParameter(program, gl.LINK_STATUS)) {
+          throw new Error(gl.getProgramInfoLog(program) ?? "Unable to link portrait program");
+        }
+
+        const positionBuffer = gl.createBuffer();
+        if (!positionBuffer) throw new Error("Unable to create portrait geometry");
+        gl.bindBuffer(gl.ARRAY_BUFFER, positionBuffer);
+        gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 1, -1, -1, 1, -1, 1, 1, -1, 1, 1]), gl.STATIC_DRAW);
+        portraitTexture = createTexture(portraitImage);
+        spiderTexture = createTexture(spiderImage);
+        gl.useProgram(program);
+        gl.bindBuffer(gl.ARRAY_BUFFER, positionBuffer);
+        const positionLocation = gl.getAttribLocation(program, "aPosition");
+        gl.enableVertexAttribArray(positionLocation);
+        gl.vertexAttribPointer(positionLocation, 2, gl.FLOAT, false, 0, 0);
+        gl.uniform1i(gl.getUniformLocation(program, "uPortrait"), 0);
+        gl.uniform1i(gl.getUniformLocation(program, "uSpider"), 1);
+
+        const aspectLocation = gl.getUniformLocation(program, "uAspect");
+        const textureAspectLocation = gl.getUniformLocation(program, "uTextureAspect");
+        const inkStampsLocation = gl.getUniformLocation(program, "uInkStamps[0]");
+        const inkAgesLocation = gl.getUniformLocation(program, "uInkAges[0]");
+        const inkAges = new Float32Array(INK_STAMP_COUNT);
+        gl.clearColor(0, 0, 0, 0);
+
+        const textureAspect = portraitImage.naturalWidth / portraitImage.naturalHeight;
+        render = () => {
+          const currentRender = render;
+          if (destroyed || !currentRender || !program || !portraitTexture || !spiderTexture) return;
+          const aspect = viewportAspect;
+          const now = performance.now() / 1000;
+          let anyActiveStamps = false;
+          for (let index = 0; index < INK_STAMP_COUNT; index += 1) {
+            inkAges[index] = now - inkBirthTimes[index];
+            if (inkAges[index] < 1.55) anyActiveStamps = true;
+          }
+          hasActiveStamps = anyActiveStamps;
+          gl.clear(gl.COLOR_BUFFER_BIT);
+          gl.useProgram(program);
+          gl.activeTexture(gl.TEXTURE0);
+          gl.bindTexture(gl.TEXTURE_2D, portraitTexture);
+          gl.activeTexture(gl.TEXTURE1);
+          gl.bindTexture(gl.TEXTURE_2D, spiderTexture);
+          gl.uniform4fv(inkStampsLocation, inkStamps);
+          gl.uniform1fv(inkAgesLocation, inkAges);
+          gl.uniform1f(aspectLocation, aspect);
+          gl.uniform1f(textureAspectLocation, textureAspect);
+          gl.drawArrays(gl.TRIANGLES, 0, 6);
+          const shouldContinue = needsRender || (isVisible && hasActiveStamps);
+          needsRender = false;
+          animationFrame = 0;
+          if (shouldContinue) {
+            animationFrame = window.requestAnimationFrame(currentRender);
+          }
+        };
+        render();
+      })
+      .catch(() => {
+        // The visible fallback image remains available if WebGL is unavailable.
+      });
+
+    return () => {
+      destroyed = true;
+      window.cancelAnimationFrame(animationFrame);
+      resizeObserver?.disconnect();
+      visibilityObserver?.disconnect();
+      canvas.removeEventListener("pointermove", onPointerMove);
+      if (portraitTexture) gl.deleteTexture(portraitTexture);
+      if (spiderTexture) gl.deleteTexture(spiderTexture);
+      if (program) gl.deleteProgram(program);
+    };
+  }, []);
+
+  return (
+    <div className="portrait__interactive" aria-label="Interactive portrait: move the cursor to reveal Xuanyu">
+      <img className="portrait__fallback" src="/profile/xuanyu-spiderman-clean.png" alt="Spider-Man styled portrait of Xuanyu" />
+      <canvas className="portrait__canvas" ref={canvasRef} aria-hidden="true" />
+      <div className="portrait__hint" aria-hidden="true">BRUSH TO REVEAL</div>
+    </div>
+  );
+}
+
 function ProfileOverview() {
-  const timeline = [
-    ["2021", "计算机科学本科", "全栈方向"],
-    ["2025", "毕业 · 全职全栈工程师", "从开发走向完整产品交付"],
-    ["2026", "FDE / AI 全栈", "Agent · 自动化工作流"],
+  const timeline: [string, string, string][] = [
+    ["2021 — 2025", "EDUCATION", "计算机科学本科 · 全栈方向"],
+    ["2025", "GRADUATION", "毕业 · 全职全栈工程师"],
+    ["2026", "FDE PROJECT", "AI 全栈 · 全自动工作流"],
   ];
 
   return (
@@ -1274,15 +1674,15 @@ function ProfileOverview() {
             </Reveal>
             <Reveal className="about__meta" delay={0.14}>
               <div>
-                <span>所在地</span>
-                <strong>深圳 · 珠海</strong>
+                <span>BASED IN</span>
+                <strong>GUANGZHOU, CHINA</strong>
               </div>
               <a href="https://github.com/xuanyu6868" target="_blank" rel="noreferrer">
-                <span>GitHub</span>
+                <span>GITHUB</span>
                 <strong>github.com/xuanyu6868 ↗</strong>
               </a>
               <a href="mailto:2284664203@qq.com">
-                <span>邮箱</span>
+                <span>EMAIL</span>
                 <strong>2284664203@qq.com ↗</strong>
               </a>
             </Reveal>
@@ -1292,10 +1692,10 @@ function ProfileOverview() {
 
       <Reveal className="language-note" delay={0.12}>
         <span>FULL-STACK FLOW</span>
-        <p>需求分析 <i>→</i> 产品实现 <i>→</i> 前后端开发 <i>→</i> AI接入 <i>→</i> 数据库设计 <i>→</i> 部署运维</p>
+        <p>需求分析 <i>-&gt;</i> 产品实现 <i>-&gt;</i> 前后端开发 <i>-&gt;</i> AI接入 <i>-&gt;</i> 数据库设计 <i>-&gt;</i> 部署运维</p>
       </Reveal>
 
-      <Reveal className="profile-timeline" delay={0.1} rootMargin="0px 0px 12% 0px">
+      <Reveal className="profile-timeline" delay={0.1}>
         {timeline.map(([year, tag, text]) => (
           <div className="profile-timeline__item" key={year}>
             <span className="profile-timeline__year">{year}</span>
@@ -1308,6 +1708,22 @@ function ProfileOverview() {
   );
 }
 
+/** Agent2Agent 项目案例 README(运行时拉取原文渲染) */
+const A2A_CASE_README_URL = "/projects/agent2agent/case/README.md";
+const A2A_CASE_ASSET_BASE = "/projects/agent2agent/case/";
+
+let a2aCaseReadmeCache: Promise<string> | null = null;
+function loadA2aCaseReadme() {
+  a2aCaseReadmeCache ??= fetch(A2A_CASE_README_URL).then((res) => {
+    if (!res.ok) throw new Error(`README ${res.status}`);
+    return res.text();
+  });
+  return a2aCaseReadmeCache;
+}
+
+const resolveA2aCaseUrl = (url: string) =>
+  /^(https?:)?\/\//.test(url) || url.startsWith("/") || url.startsWith("#") ? url : A2A_CASE_ASSET_BASE + url;
+
 function Agent2AgentFeature() {
   const features = [
     { title: "双向通信", desc: "双向对话与结果回传" },
@@ -1316,6 +1732,63 @@ function Agent2AgentFeature() {
     { title: "持续上下文", desc: "长期会话与任务通道" },
   ];
   const techStack = ["A2A", "Node.js", "TypeScript", "Claude SDK", "MCP"];
+
+  const entryRef = useRef<HTMLButtonElement>(null);
+  const closeRef = useRef<HTMLButtonElement>(null);
+  const panelRef = useRef<HTMLDivElement>(null);
+  const [briefOpen, setBriefOpen] = useState(false);
+  const [caseMd, setCaseMd] = useState<string | null>(null);
+  const [caseError, setCaseError] = useState(false);
+
+  // 首次打开弹窗时拉取 README 原文
+  useEffect(() => {
+    if (!briefOpen || caseMd || caseError) return;
+    let alive = true;
+    loadA2aCaseReadme()
+      .then((md) => { if (alive) setCaseMd(md); })
+      .catch(() => { if (alive) setCaseError(true); });
+    return () => { alive = false; };
+  }, [briefOpen, caseMd, caseError]);
+
+  // 弹窗打开时:ESC 关闭、锁定页面滚动、管理焦点(与 SparkCommerce 弹窗同一套交互)
+  useEffect(() => {
+    if (!briefOpen) return;
+    const entryEl = entryRef.current;
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setBriefOpen(false);
+    };
+    const blockScroll = (event: Event) => {
+      const insidePanel = event.target instanceof Element && event.target.closest(".a2a-modal__panel");
+      if (insidePanel) {
+        const panel = panelRef.current;
+        if (panel && event instanceof WheelEvent) {
+          const atTop = panel.scrollTop <= 1;
+          const atBottom = panel.scrollTop + panel.clientHeight >= panel.scrollHeight - 1;
+          if ((event.deltaY < 0 && atTop) || (event.deltaY > 0 && atBottom)) event.preventDefault();
+        }
+        event.stopPropagation();
+        return;
+      }
+      event.preventDefault();
+      event.stopPropagation();
+    };
+    window.addEventListener("keydown", onKey);
+    window.addEventListener("wheel", blockScroll, { capture: true, passive: false });
+    window.addEventListener("touchmove", blockScroll, { capture: true, passive: false });
+    document.body.style.overflow = "hidden";
+    // 通知场景捕捉系统进入覆盖层模式(停止场景滑翔与滚轮劫持)
+    document.body.dataset.overlayOpen = "true";
+    window.dispatchEvent(new Event("portfolio:overlay-open"));
+    closeRef.current?.focus();
+    return () => {
+      window.removeEventListener("keydown", onKey);
+      window.removeEventListener("wheel", blockScroll, { capture: true });
+      window.removeEventListener("touchmove", blockScroll, { capture: true });
+      document.body.style.overflow = "";
+      delete document.body.dataset.overlayOpen;
+      entryEl?.focus();
+    };
+  }, [briefOpen]);
 
   return (
     <SceneSection className="a2a-feature section page-shell" id="profile-details" index="02" label="AGENT2AGENT" scene="work">
@@ -1341,6 +1814,18 @@ function Agent2AgentFeature() {
               基于 A2A 协议的个人 Agent 通信网络，连接 WorkBuddy、<br />
               Claude Code 与多台设备。
             </p>
+          </Reveal>
+
+          <Reveal delay={0.16}>
+            <button
+              type="button"
+              className="a2a-feature__entry"
+              ref={entryRef}
+              aria-haspopup="dialog"
+              onClick={() => setBriefOpen(true)}
+            >
+              <span className="a2a-feature__entry-text">项目简介</span>
+            </button>
           </Reveal>
 
           <Reveal className="a2a-v2__scroll" delay={0.2}>
@@ -1432,6 +1917,36 @@ function Agent2AgentFeature() {
           ))}
         </Reveal>
       </div>
+
+      {briefOpen && typeof document !== "undefined" ? createPortal(
+        <div className="a2a-modal" role="dialog" aria-modal="true" aria-label="Agent2Agent 项目简介">
+          <div className="a2a-modal__scrim" onClick={() => setBriefOpen(false)} />
+          <div className="a2a-modal__panel" ref={panelRef}>
+            <div className="a2a-modal__bar">
+              <span className="a2a-modal__dots" aria-hidden="true"><i /><i /><i /></span>
+              <span className="a2a-modal__file">agent2agent / README.md</span>
+              <button
+                type="button"
+                className="a2a-modal__close"
+                ref={closeRef}
+                aria-label="关闭项目简介"
+                onClick={() => setBriefOpen(false)}
+              >
+                ✕
+              </button>
+            </div>
+            <div className="a2a-modal__body">
+              {caseMd ? (
+                <div className="a2a-modal__md">{renderMarkdown(caseMd, resolveA2aCaseUrl)}</div>
+              ) : caseError ? (
+                <p className="a2a-modal__status">README 加载失败,请稍后重试。</p>
+              ) : (
+                <p className="a2a-modal__status"><b>$</b> loading README.md …</p>
+              )}
+            </div>
+          </div>
+        </div>
+      , document.body) : null}
     </SceneSection>
   );
 }
@@ -1563,7 +2078,7 @@ function ProjectVisual({ type }: { type: VisualType }) {
       {type === "commerce" && <CommerceVisual />}
       {type === "interior" && <InteriorVisual />}
       {type === "weiclaw" && <WeiClawVisual />}
-      {type === "roi" && <BomQuotationVisual />}
+      {(type === "roi" || type === "bom") && <BomQuotationVisual />}
       <div className="project-visual__grain" />
     </div>
   );
@@ -1659,25 +2174,61 @@ function NoteSyncGalleryScene() {
   );
 }
 
-function Capabilities() {
+function SparkCommerceBeltScene() {
   return (
-    <SceneSection className="capabilities section page-shell" id="capabilities" index={SCENE_CAPABILITIES_INDEX} label="CAPABILITIES" scene="capabilities">
-      <SectionHeader index={SCENE_CAPABILITIES_INDEX} label="CAPABILITIES" />
-      <Reveal>
-        <div className="capabilities__intro">
-          <h2 className="section-title">FROM INTERFACE<br />TO <em>INFRASTRUCTURE.</em></h2>
-          <p>Not a stack of tools—a complete path from idea to production.</p>
+    <SceneSection
+      className="project-scene spark-belt-scene section page-shell"
+      id="project-sparkcommerce"
+      index="05"
+      label="SPARKCOMMERCE AI"
+      scene="work"
+    >
+      <SectionHeader index="05" label="SPARKCOMMERCE AI" />
+      <SparkCommerceBelt />
+    </SceneSection>
+  );
+}
+
+function Capabilities() {
+  const trackRef = useRef<HTMLDivElement>(null);
+  const reduceMotion = useReducedMotion();
+  // SU7 S 形甩尾由远及近开向画面中心，到位后无缝切到配套转盘自动旋转。
+  // 播放由 IntersectionObserver 触发：每次滚入该页（从上或从下）都从头自动播放，
+  // 与滚动进度解耦；外层 320vh sticky 钉住给足观看时间。
+
+  return (
+    <SceneSection className="capabilities capabilities--cat section page-shell" id="capabilities" index={SCENE_CAPABILITIES_INDEX} label="能力" scene="capabilities">
+      <div className={`caps-cat${reduceMotion ? " caps-cat--flat" : ""}`} ref={trackRef}>
+        <div className="caps-cat__pin">
+        <Reveal className="caps-cat__head">
+          <span className="scene-eyebrow">能力</span>
+          <h2>
+            能<em>做什么</em>
+          </h2>
+        </Reveal>
+
+        <div className="caps-cat__stage">
+          <div className="cat-glow" aria-hidden="true" />
+          <Su7Showcase
+            variant="plain"
+            className="caps-car__model"
+            drive
+          />
         </div>
-      </Reveal>
-      <div className="capability-grid">
+
         {capabilities.map((capability, index) => (
-          <Reveal className={`capability ${capability.className}`} delay={index * 0.05} key={capability.index}>
-            <div className="capability__top"><span>{capability.index}</span><i /></div>
-            <h3>{capability.title.split("\n").map((line) => <span key={line}>{line}</span>)}</h3>
-            <p>{capability.description}</p>
-            <div className="capability__tech">{capability.technologies.map((technology) => <span key={technology}>{technology}</span>)}</div>
+          <Reveal className={`caps-cat__item caps-cat__item--${capability.slot}`} delay={0.08 + index * 0.05} key={capability.num}>
+            <span className="caps-cat__num">{capability.num}</span>
+            <span className="caps-cat__t">{capability.title}</span>
+            <span className="caps-cat__d">{capability.description}</span>
+            <span className="caps-cat__tech">
+              {capability.technologies.map((tech) => (
+                <i key={tech}>{tech}</i>
+              ))}
+            </span>
           </Reveal>
         ))}
+        </div>
       </div>
     </SceneSection>
   );
@@ -1685,26 +2236,36 @@ function Capabilities() {
 
 function Contact() {
   return (
-    <SceneSection className="contact" id="contact" index={SCENE_CONTACT_INDEX} label="CONTACT" scene="contact">
-      <div className="contact__glow" aria-hidden="true" />
-      <div className="page-shell contact__inner">
-        <SectionHeader index={SCENE_CONTACT_INDEX} label="CONTACT" />
-        <div className="contact__main">
-          <Reveal>
-            <p className="contact__availability"><i /> AVAILABLE FOR<br />FULL-TIME / PROJECTS / COLLABORATION</p>
-          </Reveal>
-          <Reveal delay={0.08}>
-            <h2>HAVE AN IDEA?<br />LET&apos;S <em>SHIP IT.</em></h2>
-          </Reveal>
-          <Reveal delay={0.12}>
-            <a className="contact__email" href="mailto:2284664203@qq.com">2284664203@qq.com <span>↗</span></a>
-          </Reveal>
-          <Reveal className="contact__links" delay={0.16}>
-            <a href="https://github.com/xuanyu6868" target="_blank" rel="noreferrer">GITHUB ↗</a>
-            <a href="#top">BACK TO TOP ↑</a>
-          </Reveal>
+    <SceneSection className="contact contact--cat" id="contact" index={SCENE_CONTACT_INDEX} label="联系" scene="contact">
+      <div className="contact-cat">
+        <Reveal className="contact-cat__status-wrap">
+          <span className="contact-cat__status"><i />正在接：全职 / 项目合作 / 技术交流</span>
+        </Reveal>
+
+        <Reveal className="contact-cat__title" delay={0.06}>
+          <h2 aria-hidden="true">聊聊吧</h2>
+        </Reveal>
+
+        <div className="contact-cat__stage">
+          <div className="cat-glow" aria-hidden="true" />
+          <Su7Showcase variant="plain" className="contact-car__model" />
         </div>
-        <footer><span>XUANYU © 2026</span><span>DESIGNED &amp; BUILT BY XUANYU</span></footer>
+
+        <Reveal className="contact-cat__cta" delay={0.12}>
+          <a className="contact-cat__email" href="mailto:2284664203@qq.com">
+            2284664203@qq.com <i>↗</i>
+          </a>
+          <div className="contact-cat__links">
+            <a href="https://github.com/xuanyu6868" target="_blank" rel="noreferrer">GitHub ↗</a>
+            <a href="#top">回到顶部 ↑</a>
+          </div>
+        </Reveal>
+
+        <footer className="contact-cat__footer">
+          <span>禤宇 © 2026</span>
+          <span>SU7 模型：Ddjaz Design（CC BY-NC-SA）</span>
+          <span>设计 + 代码：禤宇 · 监工：猫</span>
+        </footer>
       </div>
     </SceneSection>
   );
@@ -1907,6 +2468,9 @@ function SceneSnapController() {
     };
 
     const onWheel = (event: WheelEvent) => {
+      // 覆盖层(项目简介弹窗等)打开时,滚轮完全交给覆盖层自己处理
+      if (document.body.dataset.overlayOpen === "true") return;
+
       const now = Date.now();
       const delta = wheelPixels(event);
       const magnitude = Math.abs(delta);
@@ -2067,7 +2631,11 @@ export default function Portfolio() {
         {projects[0] && <ProjectScene project={projects[0]} position={0} />}
         <NoteSyncGalleryScene />
         {projects.slice(1).map((project, index) => (
-          <ProjectScene project={project} position={index + 1} key={project.id} />
+          project.id === "sparkcommerce" ? (
+            <SparkCommerceBeltScene key={project.id} />
+          ) : (
+            <ProjectScene project={project} position={index + 1} key={project.id} />
+          )
         ))}
         <Capabilities />
         <Contact />

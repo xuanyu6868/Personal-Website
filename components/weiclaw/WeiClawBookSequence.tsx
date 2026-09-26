@@ -2,6 +2,7 @@
 
 import { useEffect, useRef } from "react";
 import {
+  SEQUENCE_VERSION,
   SPREAD_STEP,
   TURN_FRAME_COUNT,
   resolveSequenceSpread,
@@ -10,7 +11,7 @@ import {
 } from "./sequenceTurn";
 
 const frameUrl = (spread: number, index: number) =>
-  `/sequence/weiclaw-turn/spread-${String(spread).padStart(4, "0")}/frame-${String(index).padStart(4, "0")}.webp`;
+  `/sequence/weiclaw-turn/spread-${String(spread).padStart(4, "0")}/frame-${String(index).padStart(4, "0")}.webp?v=${SEQUENCE_VERSION}`;
 
 const MAX_DECODE_CONCURRENCY = 6;
 

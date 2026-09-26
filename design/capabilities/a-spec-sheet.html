@@ -1,0 +1,153 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>能力 · 方案 A / 配置器参数表</title>
+<style>
+  :root {
+    --bg: #070707;
+    --ink: #f1efe9;
+    --dim: rgba(241, 239, 233, .56);
+    --faint: rgba(241, 239, 233, .34);
+    --line: rgba(241, 239, 233, .14);
+    --accent: #ff4d2e;
+    --blue: #39bff9;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body { height: 100%; }
+  body {
+    background: var(--bg);
+    color: var(--ink);
+    font-family: "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+    overflow: hidden;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  nav {
+    position: absolute; top: 0; left: 0; right: 0; z-index: 10;
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 20px 44px; border-bottom: 1px solid rgba(241,239,233,.08);
+  }
+  .brand { display: flex; align-items: center; gap: 12px; font-size: 17px; font-weight: 600; }
+  .brand i { width: 8px; height: 8px; border-radius: 50%; background: var(--blue); box-shadow: 0 0 13px rgba(53,185,247,.55); }
+  .links { display: flex; gap: 56px; font-size: 14px; color: var(--dim); }
+  .links a { position: relative; padding-bottom: 8px; }
+  .links a.on { color: var(--ink); }
+  .links a.on::after { content: ""; position: absolute; left: 0; right: 0; bottom: 0; height: 2px; background: var(--blue); box-shadow: 0 0 12px rgba(57,191,249,.6); }
+  .cta { border: 1px solid rgba(241,239,233,.4); padding: 12px 26px; font-size: 14px; letter-spacing: .06em; }
+
+  main { position: relative; height: 100vh; display: flex; flex-direction: column; }
+
+  .head {
+    display: flex; align-items: flex-end; justify-content: space-between;
+    padding: 108px 64px 0;
+  }
+  .head h1 { font-size: 92px; font-weight: 700; letter-spacing: -.04em; line-height: 1; }
+  .head h1 em { font-style: normal; color: var(--accent); }
+  .head .eyebrow { display: block; font-family: ui-monospace, Menlo, monospace; font-size: 11px; letter-spacing: .34em; color: var(--faint); margin-bottom: 20px; }
+  .head .meta { text-align: right; font-family: ui-monospace, Menlo, monospace; font-size: 11px; line-height: 2.1; letter-spacing: .14em; color: var(--faint); }
+  .head .meta b { color: var(--ink); font-weight: 500; }
+
+  .stage { position: relative; flex: 1; }
+  .stage::before {
+    content: ""; position: absolute; left: 50%; top: 58%; width: 1200px; height: 480px;
+    transform: translate(-50%, -50%);
+    background: radial-gradient(ellipse at center, rgba(70, 170, 190, .16), transparent 62%);
+  }
+  .car {
+    position: absolute; left: 50%; top: 47%; transform: translate(-50%, -50%);
+    width: 1080px;
+    filter: drop-shadow(0 60px 80px rgba(0,0,0,.6));
+  }
+  .road {
+    position: absolute; left: 64px; right: 64px; top: 72%; height: 1px;
+    background: linear-gradient(90deg, transparent, rgba(241,239,233,.35) 18%, rgba(241,239,233,.35) 82%, transparent);
+  }
+  .road::after {
+    content: ""; position: absolute; left: 50%; top: -5px; width: 9px; height: 9px;
+    transform: translateX(-50%) rotate(45deg); background: var(--accent);
+  }
+  .stage-tag {
+    position: absolute; left: 64px; top: 14%;
+    font-family: ui-monospace, Menlo, monospace; font-size: 10px; letter-spacing: .3em; color: var(--faint);
+    writing-mode: vertical-rl;
+  }
+  .stage-tag-r {
+    position: absolute; right: 64px; top: 14%;
+    font-family: ui-monospace, Menlo, monospace; font-size: 10px; letter-spacing: .3em; color: var(--faint);
+    writing-mode: vertical-rl;
+  }
+
+  .spec {
+    display: grid; grid-template-columns: repeat(5, 1fr);
+    margin: 0 64px 46px; border-top: 1px solid var(--line);
+  }
+  .col { position: relative; padding: 22px 26px 4px; }
+  .col + .col::before { content: ""; position: absolute; left: 0; top: 0; bottom: -46px; width: 1px; background: var(--line); }
+  .col.hot { background: linear-gradient(180deg, rgba(255,77,46,.10), transparent 70%); }
+  .col.hot::after { content: ""; position: absolute; left: 0; right: 0; top: -1px; height: 2px; background: var(--accent); }
+  .num { font-family: "Songti SC", "STSong", serif; font-size: 30px; color: var(--accent); }
+  .col:not(.hot) .num { color: rgba(241,239,233,.85); }
+  .t { display: block; margin-top: 10px; font-size: 21px; font-weight: 600; letter-spacing: .02em; }
+  .d { display: block; margin-top: 10px; font-size: 12.5px; line-height: 1.8; color: var(--dim); min-height: 44px; }
+  .tech { display: block; margin-top: 12px; font-family: ui-monospace, Menlo, monospace; font-size: 10px; line-height: 1.9; letter-spacing: .04em; color: var(--faint); }
+</style>
+</head>
+<body>
+<nav>
+  <div class="brand"><i></i>禤宇</div>
+  <div class="links"><a>工作</a><a>关于</a><a class="on">能力</a><a>联系</a></div>
+  <div class="cta">联系我&nbsp;&nbsp;↗</div>
+</nav>
+<main>
+  <div class="head">
+    <h1><span class="eyebrow">能 力 / CAPABILITIES</span>能<em>做什么</em></h1>
+    <div class="meta">
+      <b>05</b> 项核心能力<br>
+      FULL-STACK · AI-NATIVE<br>
+      从想法到上线的完整交付
+    </div>
+  </div>
+
+  <div class="stage">
+    <span class="stage-tag">XIAOMI SU7 — DRAG TO ROTATE</span>
+    <span class="stage-tag-r">360° TURNTABLE / WEBGL SEQUENCE</span>
+    <img class="car" src="su7-side.webp" alt="SU7">
+    <div class="road"></div>
+  </div>
+
+  <div class="spec">
+    <div class="col">
+      <span class="num">壹</span>
+      <span class="t">前端工程</span>
+      <span class="d">响应式界面、复杂产品交互、可扩展的前端架构</span>
+      <span class="tech">React / Vue / TypeScript<br>Vite / Tailwind / 微信小程序</span>
+    </div>
+    <div class="col">
+      <span class="num">贰</span>
+      <span class="t">后端架构</span>
+      <span class="d">API 设计、业务逻辑、数据库建模、生产级后端服务</span>
+      <span class="tech">Node.js / Express / FastAPI<br>Spring Boot / MySQL / Redis</span>
+    </div>
+    <div class="col hot">
+      <span class="num">叁</span>
+      <span class="t">AI 产品工程</span>
+      <span class="d">大模型、多模态、提示词系统，落进真实产品流程</span>
+      <span class="tech">GPT / Claude / Kimi / VLM<br>提示词工程 / RAG</span>
+    </div>
+    <div class="col">
+      <span class="num">肆</span>
+      <span class="t">自动化</span>
+      <span class="d">重复工作流、浏览器操作、结构化数据采集</span>
+      <span class="tech">Playwright / 浏览器自动化<br>抓包分析 / Computer Use</span>
+    </div>
+    <div class="col">
+      <span class="num">伍</span>
+      <span class="t">运维交付</span>
+      <span class="d">从本地开发到稳定生产环境的完整交付</span>
+      <span class="tech">Docker / Nginx / PM2<br>Linux / 阿里云 / OSS</span>
+    </div>
+  </div>
+</main>
+</body>
+</html>

@@ -1,0 +1,44 @@
+{
+  "styles": [
+    {
+      "id": "tmall_pro",
+      "name": "天猫大牌"
+    },
+    {
+      "id": "xiaohongshu_lifestyle",
+      "name": "小红书种草"
+    },
+    {
+      "id": "skincare_closeup",
+      "name": "美妆微距特写"
+    },
+    {
+      "id": "3c_tech",
+      "name": "3C数码科技"
+    },
+    {
+      "id": "food_gourmet",
+      "name": "美食餐饮"
+    },
+    {
+      "id": "home_lifestyle",
+      "name": "家居生活"
+    },
+    {
+      "id": "sports_outdoor",
+      "name": "运动户外"
+    },
+    {
+      "id": "jewelry_luxury",
+      "name": "珠宝奢品"
+    },
+    {
+      "id": "packaging_commercial",
+      "name": "包装设计"
+    },
+    {
+      "id": "anime_style",
+      "name": "二次元插画"
+    }
+  ]
+}

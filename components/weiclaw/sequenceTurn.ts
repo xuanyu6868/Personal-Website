@@ -2,6 +2,9 @@ import type { TurnDirection } from "./paperGeometry.ts";
 
 export const TURN_FRAME_COUNT = 41;
 export const SPREAD_STEP = 2;
+// Bump this whenever the prerendered frames are regenerated so browsers and
+// dev-server sessions drop their cached images.
+export const SEQUENCE_VERSION = "20260920";
 
 const clamp01 = (value: number) => Math.min(1, Math.max(0, value));
 

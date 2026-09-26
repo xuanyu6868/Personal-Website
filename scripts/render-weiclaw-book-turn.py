@@ -10,8 +10,8 @@ sequence:
   frame-0040.webp  book body only (page merged in the left stack)
 
 Frame 0 and frame 40 are identical except for the invisible page-stack delta,
-so the player can snap 40 -> 0 seamlessly. Pages are blank cream paper; the
-DOM overlay prints content on top of the static spread.
+so the player can snap 40 -> 0 seamlessly. Settled pages carry the page prints
+baked into the paper (see --prints-dir); no DOM overlay is needed on top.
 
 Usage:
   blender -b public/models/weiclaw-book.blend -P scripts/render-weiclaw-book-turn.py -- \
@@ -27,6 +27,11 @@ Use --out for an exact legacy output directory; otherwise frames are written to
 (transparent PNGs over the paper base). The front print is the right page of
 this spread, the back print the left page of the next spread; the back print is
 sampled mirrored on U so it reads correctly once the leaf lands on the left.
+
+Settled sheets are printed per spread: frame 0 shows this spread's left/right
+pages, mid frames reveal the next spread's right page under the lifting sheet,
+and frame 40 shows the next spread fully settled. Missing pages (the blank
+half of the last spread) fall back to plain paper.
 """
 
 import math
@@ -47,6 +52,7 @@ FRAME_COUNT = 41
 TEST_MODE = False
 FRONT_PAGE = None
 BACK_PAGE = None
+PRINTS_DIR = "public/images/weiclaw/prints"
 if "--out-root" in argv:
     OUT_ROOT = argv[argv.index("--out-root") + 1]
 if "--out" in argv:
@@ -63,6 +69,8 @@ if "--front-page" in argv:
     FRONT_PAGE = argv[argv.index("--front-page") + 1]
 if "--back-page" in argv:
     BACK_PAGE = argv[argv.index("--back-page") + 1]
+if "--prints-dir" in argv:
+    PRINTS_DIR = argv[argv.index("--prints-dir") + 1]
 if "--test" in argv:
     TEST_MODE = True
 if "--debug" in argv:
@@ -112,13 +120,14 @@ def gaussian(value, center, radius):
 
 
 def settled_depth(u, v):
-    spine_dip = -0.075 * gaussian(u, 0, 0.33)
-    inner_crest = 0.055 * gaussian(u, 0.3, 0.29)
-    broad_arc = 0.012 * smoothstep(0.2, 1, u) ** 1.8
-    outer_lift = 0.026 * smoothstep(0.66, 1, u) ** 1.5
-    vertical_bow = 0.004 * (1 - ((v - 0.49) * 2) ** 2)
-    page_twist = 0.0016 * math.sin(math.pi * v) * (u - 0.42)
-    return spine_dip + inner_crest + broad_arc + outer_lift + vertical_bow + page_twist
+    # Pressed-open hardcover profile: a deep narrow gutter at the spine, the
+    # page rising onto a flat plateau, then draping slightly at the fore-edge.
+    gutter = -0.095 * gaussian(u, 0, 0.17)
+    rise = 0.075 * smoothstep(0.03, 0.45, u) ** 1.15
+    drape = -0.02 * smoothstep(0.58, 1, u) ** 1.7
+    crown = 0.0032 * (1 - ((v - 0.49) * 2) ** 2)
+    twist = 0.0014 * math.sin(math.pi * v) * (u - 0.42)
+    return gutter + rise + drape + crown + twist
 
 
 def settled_horizontal(u):
@@ -126,9 +135,11 @@ def settled_horizontal(u):
 
 
 def open_book_boundary_offset(u, v):
-    arch = math.sin(math.pi * u)
-    top_offset = 0.024 * (1 - u) + 0.028 * arch
-    bottom_offset = -0.031 * (1 - u) - 0.011 * arch
+    # Nearly straight top/bottom edges with a slight sag toward the fore-edge
+    # and a whisper of ripple, instead of the old pillow silhouette.
+    sag = 0.007 * smoothstep(0.45, 1, u) ** 1.4
+    top_offset = -sag
+    bottom_offset = sag
     edge_ripple = (
         0.00022 * math.sin(u * math.pi * 5.4) + 0.00012 * math.sin(u * math.pi * 11.3)
     ) * (u ** 0.8) * (1 if v < 0.5 else -0.65)
@@ -136,12 +147,11 @@ def open_book_boundary_offset(u, v):
 
 
 def fore_edge_offset(u, v):
-    edge_influence = smoothstep(0.66, 1, u) ** 2
-    centered = v - 0.48
-    broad_bow = 0.0022 * (1 - 4 * centered * centered)
-    corner_inset = -0.0026 * (abs(v - 0.5) * 2) ** 5
-    handmade_variation = 0.00048 * math.sin(v * math.pi * 3.2) - 0.00042 * v
-    return edge_influence * (broad_bow + corner_inset + handmade_variation)
+    edge_influence = smoothstep(0.7, 1, u) ** 2
+    centered = v - 0.5
+    broad_bow = 0.0018 * (1 - 4 * centered * centered)
+    corner_inset = -0.005 * (abs(v - 0.5) * 2) ** 6
+    return edge_influence * (broad_bow + corner_inset)
 
 
 def resolve_turn_pose(progress, curve_intensity=1.0):
@@ -164,7 +174,7 @@ def paper_positions(columns, rows, side, mode, progress=0.0):
     for row in range(rows + 1):
         v = row / rows
         corner_distance = abs(v - 0.5) * 2
-        corner_droop = (corner_distance ** 5) * (-0.0035 if v < 0.5 else 0.0025)
+        corner_droop = (corner_distance ** 6) * (-0.008 if v < 0.5 else 0.008)
         base_y = (0.5 - v) * PAGE_HEIGHT
         integrated_x = 0.0
         integrated_z = 0.0
@@ -253,7 +263,7 @@ scene.render.image_settings.color_mode = "RGBA"
 scene.render.image_settings.quality = 85
 
 # Drop the preview rig; the render builds its own camera and lights.
-for name in ("PreviewCamera", "PreviewSun", "PreviewTarget"):
+for name in ("PreviewCamera", "PreviewSun", "PreviewFill", "PreviewTarget"):
     preview = bpy.data.objects.get(name)
     if preview is not None:
         bpy.data.objects.remove(preview, do_unlink=True)
@@ -264,6 +274,23 @@ cover = bpy.data.objects["Cover"]
 block = bpy.data.objects.get("PageBlock")
 if block is not None:
     bpy.data.objects.remove(block, do_unlink=True)
+
+# The .blend carries the interactive viewport rig (BookRig + shaped page
+# sheets). Hide it so only this script's own pages and stacks render.
+# Its depsgraph handler re-poses (and re-shows) the rig pages on every
+# evaluation, so unregister it first or the prints on the rig sheets leak
+# through the settled spreads.
+bpy.app.handlers.depsgraph_update_post[:] = [
+    handler
+    for handler in bpy.app.handlers.depsgraph_update_post
+    if getattr(handler, "__name__", "") != "weiclaw_book_rig_update"
+]
+rig = bpy.data.objects.get("BookRig")
+if rig is not None:
+    rig.hide_render = True
+    for child in rig.children_recursive:
+        if child != cover:
+            child.hide_render = True
 
 # Give the book a real hardcover silhouette: a wider, darker cover with a
 # beveled lip so the pages sit visibly inside the shell.
@@ -279,8 +306,8 @@ for modifier in list(cover.modifiers):
     if modifier.type == "BEVEL":
         cover.modifiers.remove(modifier)
 cover_bevel = cover.modifiers.new("Bevel", "BEVEL")
-cover_bevel.width = 0.012
-cover_bevel.segments = 2
+cover_bevel.width = 0.02
+cover_bevel.segments = 3
 cover_mat = cover.data.materials[0] if cover.data.materials else None
 if cover_mat is not None and cover_mat.use_nodes:
     cover_bsdf = next((n for n in cover_mat.node_tree.nodes if n.type == "BSDF_PRINCIPLED"), None)
@@ -330,6 +357,9 @@ def make_printed_turning_material(name, color, front_path, back_path):
 
     The back print is sampled mirrored on U so the verso reads correctly once
     the leaf lands on the left stack (the mesh flips around the spine axis).
+    Prints soak into the sheet like ink: print color multiplies with the
+    paper tone so whites dissolve, and the paper fiber multiplies back over
+    the print (plus a gentle bump) so the sheet never reads as a sticker.
     """
     material = bpy.data.materials.new(name)
     material.use_nodes = True
@@ -337,41 +367,65 @@ def make_printed_turning_material(name, color, front_path, back_path):
     socket(bsdf, "Roughness").default_value = 0.94
     nodes = material.node_tree.nodes
     links = material.node_tree.links
-
-    uv_front = nodes.new("ShaderNodeUVMap")
-    front_tex = nodes.new("ShaderNodeTexImage")
-    front_tex.image = bpy.data.images.load(front_path)
-    links.new(uv_front.outputs[0], front_tex.inputs[0])
-
-    uv_back = nodes.new("ShaderNodeUVMap")
-    mirror = nodes.new("ShaderNodeMapping")
-    mirror.inputs["Location"].default_value = (1.0, 0.0, 0.0)
-    mirror.inputs["Scale"].default_value = (-1.0, 1.0, 1.0)
-    back_tex = nodes.new("ShaderNodeTexImage")
-    back_tex.image = bpy.data.images.load(back_path)
-    links.new(uv_back.outputs[0], mirror.inputs[0])
-    links.new(mirror.outputs[0], back_tex.inputs[0])
-
     paper = (*color, 1.0)
-    mix_front = nodes.new("ShaderNodeMixRGB")
-    mix_front.inputs[1].default_value = paper
-    links.new(front_tex.outputs["Alpha"], mix_front.inputs[0])
-    links.new(front_tex.outputs["Color"], mix_front.inputs[2])
-    mix_back = nodes.new("ShaderNodeMixRGB")
-    mix_back.inputs[1].default_value = paper
-    links.new(back_tex.outputs["Alpha"], mix_back.inputs[0])
-    links.new(back_tex.outputs["Color"], mix_back.inputs[2])
+
+    def inked_side(image_path, mirrored):
+        uv = nodes.new("ShaderNodeUVMap")
+        tex = nodes.new("ShaderNodeTexImage")
+        tex.image = bpy.data.images.load(image_path)
+        if mirrored:
+            mirror = nodes.new("ShaderNodeMapping")
+            mirror.inputs["Location"].default_value = (1.0, 0.0, 0.0)
+            mirror.inputs["Scale"].default_value = (-1.0, 1.0, 1.0)
+            links.new(uv.outputs[0], mirror.inputs[0])
+            links.new(mirror.outputs[0], tex.inputs[0])
+        else:
+            links.new(uv.outputs[0], tex.inputs[0])
+        soak = nodes.new("ShaderNodeMixRGB")
+        soak.blend_type = "MULTIPLY"
+        soak.inputs[0].default_value = 1.0
+        soak.inputs[2].default_value = paper
+        links.new(tex.outputs["Color"], soak.inputs[1])
+        inked = nodes.new("ShaderNodeMixRGB")
+        inked.inputs[1].default_value = paper
+        links.new(tex.outputs["Alpha"], inked.inputs[0])
+        links.new(soak.outputs[0], inked.inputs[2])
+        return inked.outputs[0], uv.outputs[0]
+
+    front, front_uv = inked_side(front_path, mirrored=False)
+    back, _ = inked_side(back_path, mirrored=True)
+
+    fiber_image = bpy.data.images.load(fiber_path) if os.path.exists(fiber_path) else None
+    if fiber_image is not None:
+        fiber_tex = nodes.new("ShaderNodeTexImage")
+        fiber_tex.image = fiber_image
+        links.new(front_uv, fiber_tex.inputs[0])
+        grain = nodes.new("ShaderNodeMixRGB")
+        grain.inputs[0].default_value = 0.18
+        grain.inputs[1].default_value = (1.0, 1.0, 1.0, 1.0)
+        links.new(fiber_tex.outputs["Color"], grain.inputs[2])
+
+        def over_grain(color_socket):
+            over = nodes.new("ShaderNodeMixRGB")
+            over.blend_type = "MULTIPLY"
+            over.inputs[0].default_value = 1.0
+            links.new(color_socket, over.inputs[1])
+            links.new(grain.outputs[0], over.inputs[2])
+            return over.outputs[0]
+
+        front = over_grain(front)
+        back = over_grain(back)
 
     geometry = nodes.new("ShaderNodeNewGeometry")
     choose = nodes.new("ShaderNodeMixRGB")
     links.new(geometry.outputs["Backfacing"], choose.inputs[0])
-    links.new(mix_front.outputs[0], choose.inputs[1])
-    links.new(mix_back.outputs[0], choose.inputs[2])
+    links.new(front, choose.inputs[1])
+    links.new(back, choose.inputs[2])
     links.new(choose.outputs[0], socket(bsdf, "Base Color"))
 
-    if os.path.exists(fiber_path):
+    if fiber_image is not None:
         texture = nodes.new("ShaderNodeTexImage")
-        texture.image = bpy.data.images.load(fiber_path)
+        texture.image = fiber_image
         bump = nodes.new("ShaderNodeBump")
         socket(bump, "Strength").default_value = 0.12
         socket(bump, "Distance").default_value = 0.02
@@ -391,22 +445,94 @@ def add_page_uvs(obj, columns, rows):
             layer.data[loop_index].uv = (column / columns, 1.0 - row / rows)
 
 
+def make_printed_settled_material(name, color, image_path, mirrored):
+    """Single-sided ink-soaked print for a settled sheet (only its top shows).
+
+    Same soak/grain/bump treatment as the turning sheet. Left pages pass
+    mirrored=True: the grid has u=0 at the spine on both sides, but a left
+    page's print has the spine at the image's right edge.
+    """
+    material = bpy.data.materials.new(name)
+    material.use_nodes = True
+    bsdf = principled_node(material)
+    socket(bsdf, "Roughness").default_value = 0.94
+    nodes = material.node_tree.nodes
+    links = material.node_tree.links
+    paper = (*color, 1.0)
+
+    uv = nodes.new("ShaderNodeUVMap")
+    tex = nodes.new("ShaderNodeTexImage")
+    tex.image = bpy.data.images.load(image_path)
+    if mirrored:
+        mirror = nodes.new("ShaderNodeMapping")
+        mirror.inputs["Location"].default_value = (1.0, 0.0, 0.0)
+        mirror.inputs["Scale"].default_value = (-1.0, 1.0, 1.0)
+        links.new(uv.outputs[0], mirror.inputs[0])
+        links.new(mirror.outputs[0], tex.inputs[0])
+    else:
+        links.new(uv.outputs[0], tex.inputs[0])
+    soak = nodes.new("ShaderNodeMixRGB")
+    soak.blend_type = "MULTIPLY"
+    soak.inputs[0].default_value = 1.0
+    soak.inputs[2].default_value = paper
+    links.new(tex.outputs["Color"], soak.inputs[1])
+    inked = nodes.new("ShaderNodeMixRGB")
+    inked.inputs[1].default_value = paper
+    links.new(tex.outputs["Alpha"], inked.inputs[0])
+    links.new(soak.outputs[0], inked.inputs[2])
+    color_socket = inked.outputs[0]
+
+    fiber_image = bpy.data.images.load(fiber_path) if os.path.exists(fiber_path) else None
+    if fiber_image is not None:
+        fiber_tex = nodes.new("ShaderNodeTexImage")
+        fiber_tex.image = fiber_image
+        links.new(uv.outputs[0], fiber_tex.inputs[0])
+        grain = nodes.new("ShaderNodeMixRGB")
+        grain.inputs[0].default_value = 0.18
+        grain.inputs[1].default_value = (1.0, 1.0, 1.0, 1.0)
+        links.new(fiber_tex.outputs["Color"], grain.inputs[2])
+        over = nodes.new("ShaderNodeMixRGB")
+        over.blend_type = "MULTIPLY"
+        over.inputs[0].default_value = 1.0
+        links.new(color_socket, over.inputs[1])
+        links.new(grain.outputs[0], over.inputs[2])
+        color_socket = over.outputs[0]
+
+        bump_tex = nodes.new("ShaderNodeTexImage")
+        bump_tex.image = fiber_image
+        bump = nodes.new("ShaderNodeBump")
+        socket(bump, "Strength").default_value = 0.12
+        socket(bump, "Distance").default_value = 0.02
+        links.new(bump_tex.outputs[0], socket(bump, "Height"))
+        links.new(bump.outputs[0], socket(bsdf, "Normal"))
+
+    links.new(color_socket, socket(bsdf, "Base Color"))
+    return material
+
+
 paper_mat = make_paper_material("weiclaw_paper", (0.965, 0.933, 0.855))
 
 # Stacks rest on the cover's top surface (z = -0.09) and reach just under the
-# settled spread, so no hollow shows between cover and pages.
+# settled spread at full height. They start u=0.25 away from the spine so the
+# block never pokes through the gutter dip of the open pages.
 PAGE_STACK_THICKNESS = 0.004
-PAGE_STACK_GAP = 0.0066
+PAGE_STACK_GAP = 0.0042
 PAGE_STACK_BASE_Z = -0.081
+STACK_INNER_X = 0.25
+STACK_OUTER_X = 0.998
+STACK_HEIGHT = 1.262
 # Slightly deeper tone than the open pages so the fore-edge reads as a block.
 stack_mat = make_paper_material("weiclaw_page_stack", (0.78, 0.735, 0.655))
 stack_pages = []
 for index in range(PHYSICAL_PAGES):
-    bpy.ops.mesh.primitive_cube_add(location=(0.5, 0.0, 0.0))
+    bpy.ops.mesh.primitive_cube_add(location=(0.625, 0.0, 0.0))
     page = bpy.context.object
     page.name = f"Page_{index + 1:03d}"
-    page.dimensions = (1.0, PAGE_HEIGHT, PAGE_STACK_THICKNESS)
+    page.dimensions = (STACK_OUTER_X - STACK_INNER_X, STACK_HEIGHT, PAGE_STACK_THICKNESS)
     bpy.ops.object.transform_apply(location=False, rotation=False, scale=True)
+    page_bevel = page.modifiers.new("Bevel", "BEVEL")
+    page_bevel.width = 0.0015
+    page_bevel.segments = 2
     page.data.materials.append(stack_mat)
     page.parent = book_empty
     page.matrix_parent_inverse = book_empty.matrix_world.inverted()
@@ -444,13 +570,41 @@ def pose_page_stack(progress):
             page.hide_render = True
             continue
         page.hide_render = False
-        page.location = (side * 0.5, 0.0, PAGE_STACK_BASE_Z + stack_index * PAGE_STACK_GAP)
+        stack_center_x = (STACK_INNER_X + STACK_OUTER_X) / 2
+        page.location = (side * stack_center_x, 0.0, PAGE_STACK_BASE_Z + stack_index * PAGE_STACK_GAP)
 
 
 pose_page_stack(0)
 
 settled_left, _, _ = build_grid_object("SettledLeft", SETTLED_COLUMNS, SETTLED_ROWS, "left", "settled", paper_mat)
 settled_right, _, _ = build_grid_object("SettledRight", SETTLED_COLUMNS, SETTLED_ROWS, "right", "settled", paper_mat)
+
+
+# Settled prints: frame 0 shows this spread, mid frames already reveal the
+# next spread's right page under the lifting sheet, frame 40 shows the next
+# spread settled. Missing pages fall back to blank paper.
+def settled_print_material(page_index, side):
+    path = os.path.join(PRINTS_DIR, f"page-{page_index + 1:02d}.png")
+    if page_index >= SPREAD_COUNT or not os.path.exists(path):
+        return paper_mat
+    return make_printed_settled_material(
+        f"weiclaw_paper_settled_{side}_{page_index + 1:02d}",
+        (0.965, 0.933, 0.855),
+        path,
+        mirrored=(side == "left"),
+    )
+
+
+next_spread_start = SPREAD_START + SPREAD_STEP if HAS_TURN else SPREAD_START
+settled_mats = {
+    "cur_left": settled_print_material(SPREAD_START, "left"),
+    "cur_right": settled_print_material(SPREAD_START + 1, "right"),
+    "next_left": settled_print_material(next_spread_start, "left"),
+    "next_right": settled_print_material(next_spread_start + 1, "right"),
+}
+add_page_uvs(settled_left, SETTLED_COLUMNS, SETTLED_ROWS)
+add_page_uvs(settled_right, SETTLED_COLUMNS, SETTLED_ROWS)
+
 turning, turning_points_at, turning_faces = None, None, None
 PRINTS_READY = (
     HAS_TURN
@@ -499,6 +653,111 @@ camera.data.sensor_fit = "VERTICAL"
 camera.data.angle = math.radians(CAMERA_FOV)
 look_at(camera, (0, -0.06, 0))
 scene.camera = camera
+
+# ------------------------------------------------------- per-frame zoom plan
+# Settled frames (0/last) are also the static spreads, so they get a tighter
+# crop; mid-turn frames pull back so the flying page tip stays in frame. The
+# cover's bottom edge stays anchored at the same screen row in every frame,
+# so the book itself never moves during a turn -- only the framing dollies.
+from bpy_extras.object_utils import world_to_camera_view
+
+BASE_DISTANCE = distance
+BASE_TARGET = Vector((0, -0.06, 0))
+CAM_DIR = (BASE_TARGET - Vector(camera_position)).normalized()
+CAM_RIGHT = CAM_DIR.cross(Vector((0, 1, 0))).normalized()
+CAM_UP = CAM_RIGHT.cross(CAM_DIR).normalized()
+ZOOM_CAP = 1.16
+ANCHOR_BOTTOM_PX = round(918 * RESOLUTION_Y / 972)
+TOP_MARGIN_PX = round(6 * RESOLUTION_Y / 972)
+SMOOTH_WINDOW = 2
+
+
+def frame_content_points(progress):
+    points = []
+    for corner in cover.bound_box:
+        points.append(cover.matrix_world @ Vector(corner))
+    for obj in (settled_left, settled_right):
+        matrix = obj.matrix_world
+        for vertex in obj.data.vertices:
+            points.append(matrix @ vertex.co)
+    for page in stack_pages:
+        if page.hide_render:
+            continue
+        matrix = page.matrix_world
+        for corner in page.bound_box:
+            points.append(matrix @ Vector(corner))
+    if HAS_TURN:
+        turning_points, _ = paper_positions(TURNING_COLUMNS, TURNING_ROWS, "right", "turning", progress)
+        matrix = book_empty.matrix_world
+        for point in turning_points:
+            points.append(matrix @ Vector(point))
+    return points
+
+
+def measure_bbox_px(points, cam=camera):
+    min_x, max_x, min_y, max_y = 1.0, 0.0, 1.0, 0.0
+    for point in points:
+        coord = world_to_camera_view(scene, cam, point)
+        if coord.z <= 0:
+            continue
+        min_x = min(min_x, coord.x)
+        max_x = max(max_x, coord.x)
+        min_y = min(min_y, coord.y)
+        max_y = max(max_y, coord.y)
+    top_px = (1 - max_y) * RESOLUTION_Y
+    bottom_px = (1 - min_y) * RESOLUTION_Y
+    return min_x * RESOLUTION_X, max_x * RESOLUTION_X, top_px, bottom_px
+
+
+# Measure every frame at the base camera, then derive a smooth zoom curve.
+raw_zoom = []
+for frame_index in range(FRAME_COUNT):
+    progress = frame_index / (FRAME_COUNT - 1)
+    pose_page_stack(progress if HAS_TURN else 0.0)
+    bpy.context.view_layer.update()
+    _, _, top_px, bottom_px = measure_bbox_px(frame_content_points(progress if HAS_TURN else 0.0))
+    extent = max(1.0, bottom_px - top_px)
+    zoom = min(ZOOM_CAP, (ANCHOR_BOTTOM_PX - TOP_MARGIN_PX) / extent)
+    raw_zoom.append((zoom, bottom_px))
+
+zoom_plan = []
+for frame_index in range(FRAME_COUNT):
+    lo = max(0, frame_index - SMOOTH_WINDOW)
+    hi = min(FRAME_COUNT, frame_index + SMOOTH_WINDOW + 1)
+    zoom_plan.append(min(zoom for zoom, _ in raw_zoom[lo:hi]))
+
+
+def place_camera(zoom, base_bottom_px):
+    """Dolly to `zoom`, keeping the cover bottom anchored at ANCHOR_BOTTOM_PX."""
+    dolly = BASE_DISTANCE / zoom
+    # Zooming around the frame center would land the measured bottom here:
+    bottom_after = RESOLUTION_Y / 2 + (base_bottom_px - RESOLUTION_Y / 2) * zoom
+    delta_px = bottom_after - ANCHOR_BOTTOM_PX
+    visible_half = dolly * half_fov_tan
+    # Moving the target down lifts the content in frame (and vice versa).
+    target = BASE_TARGET - (delta_px * (2 * visible_half) / RESOLUTION_Y) * CAM_UP
+    camera.location = target - dolly * CAM_DIR
+    look_at(camera, target)
+    return dolly
+
+
+COVER_BOTTOM_LOCAL = Vector((0, -COVER_HEIGHT_TARGET / 2, 0))
+
+
+def correct_anchor(dolly):
+    """One exact linear correction so the cover bottom sits on the anchor row."""
+    bpy.context.view_layer.update()
+    anchor_world = cover.matrix_world @ COVER_BOTTOM_LOCAL
+    coord = world_to_camera_view(scene, camera, anchor_world)
+    bottom_px = (1 - coord.y) * RESOLUTION_Y
+    delta_px = bottom_px - ANCHOR_BOTTOM_PX
+    if abs(delta_px) < 0.5:
+        return
+    visible_half = dolly * half_fov_tan
+    target = camera.matrix_world @ Vector((0, 0, -dolly))  # current aim point
+    target = target - (delta_px * (2 * visible_half) / RESOLUTION_Y) * CAM_UP
+    camera.location = target - dolly * CAM_DIR
+    look_at(camera, target)
 
 # -------------------------------------------------------------------- lights
 DBG_NOBUMP = os.environ.get("DBG_NOBUMP") == "1"
@@ -603,6 +862,17 @@ for frame_index in [0, *progress_frames, last_frame]:
     if HAS_TURN and not turning.hide_render:
         points, _ = paper_positions(TURNING_COLUMNS, TURNING_ROWS, "right", "turning", progress)
         update_grid_object(turning, points)
+    if frame_index == 0:
+        settled_left.data.materials[0] = settled_mats["cur_left"]
+        settled_right.data.materials[0] = settled_mats["cur_right"]
+    elif frame_index == last_frame:
+        settled_left.data.materials[0] = settled_mats["next_left"]
+        settled_right.data.materials[0] = settled_mats["next_right"]
+    else:
+        settled_left.data.materials[0] = settled_mats["cur_left"]
+        settled_right.data.materials[0] = settled_mats["next_right"]
+    dolly = place_camera(zoom_plan[frame_index], raw_zoom[frame_index][1])
+    correct_anchor(dolly)
     scene.render.filepath = os.path.join(OUT_DIR, f"frame-{frame_index:04d}.webp")
     bpy.ops.render.render(write_still=True)
     print(f"rendered frame {frame_index:04d} (progress {progress:.3f})", flush=True)

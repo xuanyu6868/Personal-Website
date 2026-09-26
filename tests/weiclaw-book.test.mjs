@@ -60,7 +60,7 @@ test("supports pointer drag, edge click, pointer capture, and snap thresholds", 
   assert.match(componentSource, /aria-label="Previous page"[^>]+onPointerDown/);
   assert.match(componentSource, /aria-label="Next page"[^>]+onPointerDown/);
   assert.match(componentSource, /suppressClickRef/);
-  assert.match(componentSource, /onClick=\{\(event\) => \{ event\.stopPropagation\(\); onOpen\(page\); \}\}/);
+  assert.match(componentSource, /onClick=\{\(event\) => \{ event\.stopPropagation\(\); onOpen\(page, event\.currentTarget\); \}\}/);
 });
 
 test("plays the prerendered turn sequence under the DOM spread", () => {

@@ -52,6 +52,38 @@ test("aligns the Agent2Agent diagram with the left title", () => {
   );
 });
 
+test("opens the Agent2Agent case study from an intro button", () => {
+  const featureStart = componentSource.indexOf("function Agent2AgentFeature");
+  const featureEnd = componentSource.indexOf("function CommerceVisual");
+  const featureSource = componentSource.slice(featureStart, featureEnd);
+
+  assert.match(
+    featureSource,
+    /className="a2a-feature__entry"[\s\S]*?aria-haspopup="dialog"/,
+    "the Agent2Agent scene should render a project intro button",
+  );
+  assert.match(
+    featureSource,
+    /className="a2a-modal"[\s\S]*?role="dialog"/,
+    "the intro button should open a README dialog",
+  );
+  assert.match(
+    componentSource,
+    /\/projects\/agent2agent\/case\/README\.md/,
+    "the dialog should load the Agent2Agent case study README",
+  );
+  assert.match(
+    stylesheet,
+    /\.a2a-feature__entry\s*\{/,
+    "the intro button should have the slice-style pill styling",
+  );
+  assert.match(
+    stylesheet,
+    /\.a2a-modal__panel\s*\{/,
+    "the intro dialog should have the terminal-style panel styling",
+  );
+});
+
 test("keeps the note sync gallery in the 04 scene", () => {
   const labelSceneStart = componentSource.indexOf("function NoteSyncGalleryScene");
   const labelSceneEnd = componentSource.indexOf("function Capabilities");

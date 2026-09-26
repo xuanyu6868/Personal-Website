@@ -28,7 +28,7 @@ SETTLED_COLUMNS = 48
 SETTLED_ROWS = 18
 # Stacks rest on the cover's top surface (z = -0.09) and reach just under the
 # settled spread, so no hollow shows between cover and pages.
-STACK_GAP = 0.0066
+STACK_GAP = 0.0042
 STACK_BASE_Z = -0.081
 FLIGHT_CLEARANCE = 0.01
 
@@ -49,13 +49,14 @@ def gaussian(value, center, radius):
 
 
 def settled_depth(u, v):
-    spine_dip = -0.075 * gaussian(u, 0, 0.33)
-    inner_crest = 0.055 * gaussian(u, 0.3, 0.29)
-    broad_arc = 0.012 * smoothstep(0.2, 1, u) ** 1.8
-    outer_lift = 0.026 * smoothstep(0.66, 1, u) ** 1.5
-    vertical_bow = 0.004 * (1 - ((v - 0.49) * 2) ** 2)
-    page_twist = 0.0016 * math.sin(math.pi * v) * (u - 0.42)
-    return spine_dip + inner_crest + broad_arc + outer_lift + vertical_bow + page_twist
+    # Pressed-open hardcover profile: a deep narrow gutter at the spine, the
+    # page rising onto a flat plateau, then draping slightly at the fore-edge.
+    gutter = -0.095 * gaussian(u, 0, 0.17)
+    rise = 0.075 * smoothstep(0.03, 0.45, u) ** 1.15
+    drape = -0.02 * smoothstep(0.58, 1, u) ** 1.7
+    crown = 0.0032 * (1 - ((v - 0.49) * 2) ** 2)
+    twist = 0.0014 * math.sin(math.pi * v) * (u - 0.42)
+    return gutter + rise + drape + crown + twist
 
 
 def settled_horizontal(u):
@@ -63,9 +64,10 @@ def settled_horizontal(u):
 
 
 def open_book_boundary_offset(u, v):
-    arch = math.sin(math.pi * u)
-    top_offset = 0.024 * (1 - u) + 0.028 * arch
-    bottom_offset = -0.031 * (1 - u) - 0.011 * arch
+    # Nearly straight top/bottom edges with a slight sag toward the fore-edge.
+    sag = 0.007 * smoothstep(0.45, 1, u) ** 1.4
+    top_offset = -sag
+    bottom_offset = sag
     edge_ripple = (
         0.00022 * math.sin(u * math.pi * 5.4) + 0.00012 * math.sin(u * math.pi * 11.3)
     ) * (u ** 0.8) * (1 if v < 0.5 else -0.65)
@@ -73,12 +75,11 @@ def open_book_boundary_offset(u, v):
 
 
 def fore_edge_offset(u, v):
-    edge_influence = smoothstep(0.66, 1, u) ** 2
-    centered = v - 0.48
-    broad_bow = 0.0022 * (1 - 4 * centered * centered)
-    corner_inset = -0.0026 * (abs(v - 0.5) * 2) ** 5
-    handmade_variation = 0.00048 * math.sin(v * math.pi * 3.2) - 0.00042 * v
-    return edge_influence * (broad_bow + corner_inset + handmade_variation)
+    edge_influence = smoothstep(0.7, 1, u) ** 2
+    centered = v - 0.5
+    broad_bow = 0.0018 * (1 - 4 * centered * centered)
+    corner_inset = -0.005 * (abs(v - 0.5) * 2) ** 6
+    return edge_influence * (broad_bow + corner_inset)
 
 
 def resolve_turn_pose(progress, curve_intensity=1.0):
@@ -96,7 +97,7 @@ def settled_points(side, columns=SETTLED_COLUMNS, rows=SETTLED_ROWS):
     for row in range(rows + 1):
         v = row / rows
         corner_distance = abs(v - 0.5) * 2
-        corner_droop = (corner_distance ** 5) * (-0.0035 if v < 0.5 else 0.0025)
+        corner_droop = (corner_distance ** 6) * (-0.008 if v < 0.5 else 0.008)
         base_y = (0.5 - v) * PAGE_HEIGHT
         for column in range(columns + 1):
             u = column / columns
@@ -117,7 +118,7 @@ def turning_points(progress, columns=SETTLED_COLUMNS, rows=SETTLED_ROWS):
     for row in range(rows + 1):
         v = row / rows
         corner_distance = abs(v - 0.5) * 2
-        corner_droop = (corner_distance ** 5) * (-0.0035 if v < 0.5 else 0.0025)
+        corner_droop = (corner_distance ** 6) * (-0.008 if v < 0.5 else 0.008)
         base_y = (0.5 - v) * PAGE_HEIGHT
         integrated_x = 0.0
         integrated_z = 0.0
