@@ -2,10 +2,12 @@
 
 import { useEffect, useRef } from "react";
 import {
+  SPARK_BELT_IMAGE_SIZES,
   sparkBeltLaneBottom,
   sparkBeltLaneMiddle,
   sparkBeltLaneTop,
   sparkBeltProducts,
+  sparkBeltWebSrcSet,
   type SparkBeltProduct,
   type SparkBeltWebTile,
 } from "../data/sparkcommerce-belt";
@@ -23,7 +25,14 @@ const MAX_BOOST = 900;
 function WebTile({ tile }: { tile: SparkBeltWebTile }) {
   return (
     <figure className="spark-belt__web" title={tile.title}>
-      <img src={tile.image} alt={tile.title} loading="lazy" draggable={false} />
+      <img
+        src={tile.image}
+        srcSet={sparkBeltWebSrcSet(tile)}
+        sizes={SPARK_BELT_IMAGE_SIZES}
+        alt={tile.title}
+        loading="lazy"
+        draggable={false}
+      />
     </figure>
   );
 }

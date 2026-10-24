@@ -45,3 +45,77 @@ export const capabilities: Capability[] = [
     slot: "c5",
   },
 ];
+
+/* ---------------- 分枝目录（能力页：技术 / 能力 三级树，2026 技术栈） ---------------- */
+
+export type CapsMenuNode = {
+  label: string;
+  children?: CapsMenuNode[];
+};
+
+/** 一级目录「技术」的二级分组与三级具体技术项 */
+export const techMenu: CapsMenuNode[] = [
+  {
+    label: "前端",
+    children: [
+      { label: "React 19 · Next.js 16" },
+      { label: "Vue 3 · Nuxt 4" },
+      { label: "TypeScript · Vite 7" },
+      { label: "Tailwind CSS 4 · 小程序" },
+    ],
+  },
+  {
+    label: "后端",
+    children: [
+      { label: "Node.js 24 · Hono" },
+      { label: "Python · FastAPI" },
+      { label: "Java 21 · Spring Boot" },
+      { label: "PostgreSQL · Redis" },
+    ],
+  },
+  {
+    label: "AI 工程",
+    children: [
+      { label: "LLM 应用 · Agent" },
+      { label: "MCP · RAG" },
+      { label: "多模态 · 视觉生成" },
+      { label: "AI 编程工作流" },
+    ],
+  },
+  {
+    label: "运维交付",
+    children: [
+      { label: "Docker · CI/CD" },
+      { label: "云服务 · 边缘部署" },
+      { label: "Linux · 监控告警" },
+    ],
+  },
+];
+
+/** 一级目录「能力」的二级分组与三级具体能力项 */
+export const capabilityMenu: CapsMenuNode[] = [
+  {
+    label: "产品工程",
+    children: [
+      { label: "全栈产品开发" },
+      { label: "AI 产品落地" },
+      { label: "复杂交互架构" },
+    ],
+  },
+  {
+    label: "动效创意",
+    children: [
+      { label: "滚动叙事" },
+      { label: "WebGL · 3D 展示" },
+      { label: "物理交互动效" },
+    ],
+  },
+  {
+    label: "自动化效率",
+    children: [
+      { label: "工作流自动化" },
+      { label: "浏览器自动化 · 数据采集" },
+      { label: "AI 辅助研发提效" },
+    ],
+  },
+];

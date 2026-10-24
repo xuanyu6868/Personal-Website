@@ -4,6 +4,14 @@ export type SparkBeltWebTile = {
   title: string;
 };
 
+export const SPARK_BELT_IMAGE_SIZES = "35vh";
+
+export function sparkBeltWebSrcSet(tile: SparkBeltWebTile) {
+  const originalWidth = Number(tile.id.slice(4)) <= 7 ? 2880 : 1440;
+  const base = tile.image.replace(/\.png$/, "");
+  return `${base}-480.png 480w, ${base}-768.png 768w, ${base}-1024.png 1024w, ${tile.image} ${originalWidth}w`;
+}
+
 export type SparkBeltProduct = {
   id: string;
   name: string;
