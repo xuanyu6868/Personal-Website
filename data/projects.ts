@@ -1,4 +1,4 @@
-export type ProjectVisual = "commerce" | "interior" | "roi" | "bom" | "weiclaw";
+export type ProjectVisual = "commerce" | "interior" | "roi" | "bom" | "weiclaw" | "voice";
 
 export type Project = {
   id: string;
@@ -89,24 +89,18 @@ export const projects: Project[] = [
     featured: true,
   },
   {
+    // Keep the existing anchor so previous links and the scene rail continue to work.
     id: "bom-quotation",
     index: "04",
-    title: "Smart BOM Quotation System",
-    subtitle: "AUTOMATION / BUSINESS TOOL",
-    year: "PYTHON / EXCEL DATA",
-    description:
-      "A BOM auto-configuration and quotation engine for Bluetooth earphone manufacturing that turns a CSV component database into delivery-ready Excel quotes.",
-    stack: ["Python", "openpyxl", "CSV"],
-    highlights: [
-      "CSV component DB → automatic BOM matching",
-      "3 tiered plans: balanced / noise-cancelling / battery",
-      "Auto cost calculation with 1.3× margin",
-      "7 presets from ¥83 entry to ¥199 flagship",
-      "Formatted Excel quotes: BOM, labor, overhead, total",
-    ],
-    image: "/projects/bom-quotation.webp",
-    url: "#contact",
-    github: "https://github.com/xuanyu6868",
-    visual: "bom",
+    title: "DSH Voice Assistant",
+    subtitle: "VOICE / AI / SMART HOME",
+    year: "DEEPSEEK HARNESS",
+    description: "A voice assistant for DeepSeek Harness that connects conversation to smart home controls.",
+    stack: ["DeepSeek Harness", "ASR", "TTS", "MCP"],
+    highlights: ["Voice conversation", "Smart home controls", "Voice feedback"],
+    image: "/projects/dsh-voice-assistant/02-voice-interface-preview.png",
+    url: "https://github.com/xuanyu6868/dsh-voice-conversation",
+    github: "https://github.com/xuanyu6868/dsh-voice-conversation",
+    visual: "voice",
   },
 ];
