@@ -13,6 +13,7 @@ import { capabilityMenu, techMenu, type CapsMenuNode } from "../data/capabilitie
 import { renderMarkdown } from "../lib/simple-markdown";
 import { projects, type Project, type ProjectVisual as VisualType } from "../data/projects";
 import NoteSyncGallery from "./NoteSyncGallery";
+import VoiceProject from "./VoiceProject";
 import WeiClawBook from "./WeiClawBook";
 import SparkCommerceBelt from "./SparkCommerceBelt";
 import { FrameSequenceCache } from "./frameSequenceCache";
@@ -2242,7 +2243,7 @@ function ProjectScene({ project, position }: { project: Project; position: numbe
       label={sceneLabel}
       scene="work"
     >
-      <ProjectCard project={project} position={position} />
+      {project.visual === "voice" ? <VoiceProject /> : <ProjectCard project={project} position={position} />}
     </SceneSection>
   );
 }
