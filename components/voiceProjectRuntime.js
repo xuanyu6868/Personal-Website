@@ -76,36 +76,60 @@ micButton.addEventListener('click',()=>{
 });
 
 
-// Let the headline behave like a soft lens, with nearby characters responding gradually.
+// Pointer-following lens and a short ripple keep the lettering responsive.
 const title=root.querySelector('.headline h1');
 const titleGlyphs=[...title.querySelectorAll('.title-glyph')];
-let titleFrame=null, titlePointer=null;
-function updateTitleLens(){
- titleFrame=null;if(!titlePointer)return;
+titleGlyphs.forEach((glyph,i)=>glyph.style.setProperty('--intro-delay',(i*.045)+'s'));
+let titleFrame=null,titlePointer=null,titleMovedAt=0,titlePlayed=false,titleIntroTimer=null,dragState=null,releaseTimer=null;
+function updateTitleLens(now){
+ titleFrame=null;if(!titlePointer||dragState)return;
+ let waveRemaining=false;
  titleGlyphs.forEach(glyph=>{
   const rect=glyph.getBoundingClientRect();
   const dx=(titlePointer.x-(rect.left+rect.width/2))/Math.max(rect.width,1);
   const dy=(titlePointer.y-(rect.top+rect.height/2))/Math.max(rect.height,1);
-  const distance=Math.hypot(dx,dy*.7);
-  const influence=Math.max(0,1-distance/1.65);
+  const distance=Math.hypot(dx,dy*.7),influence=Math.max(0,1-distance/1.65);
   const smooth=influence*influence*(3-2*influence);
+  const elapsed=now-titleMovedAt-Math.abs(dx)*70;
+  const ripple=elapsed>=0&&elapsed<500?Math.sin(elapsed/500*Math.PI)*Math.max(0,1-distance/2.5):0;
+  if(elapsed<500&&distance<2.5)waveRemaining=true;
   glyph.style.setProperty('--title-scale',(1+smooth*.22).toFixed(3));
   glyph.style.setProperty('--title-shift',(-dx*smooth*14).toFixed(2)+'px');
   glyph.style.setProperty('--title-lift',(-smooth*6).toFixed(2)+'px');
+  glyph.style.setProperty('--wave-lift',(-ripple*4).toFixed(2)+'px');
  });
+ if(waveRemaining)titleFrame=requestAnimationFrame(updateTitleLens);
 }
 function moveTitleLens(event){
- if(event.pointerType==='touch'||!matchMedia('(hover: hover) and (prefers-reduced-motion: no-preference)').matches)return;
- titlePointer={x:event.clientX,y:event.clientY};
+ if(dragState){if(event.pointerId!==dragState.pointerId)return;dragState.glyph.style.setProperty('--drag-x',(Math.tanh((event.clientX-dragState.x)/35)*20).toFixed(2)+'px');dragState.glyph.style.setProperty('--drag-y',(Math.tanh((event.clientY-dragState.y)/35)*20).toFixed(2)+'px');return}
+ if(event.pointerType==='touch'||scene.classList.contains('title-intro')||!matchMedia('(hover: hover) and (prefers-reduced-motion: no-preference)').matches)return;
+ titlePointer={x:event.clientX,y:event.clientY};titleMovedAt=performance.now();
  if(titleFrame===null)titleFrame=requestAnimationFrame(updateTitleLens);
 }
 function clearTitleLens(){
  titlePointer=null;if(titleFrame!==null){cancelAnimationFrame(titleFrame);titleFrame=null}
- titleGlyphs.forEach(glyph=>{glyph.style.removeProperty('--title-scale');glyph.style.removeProperty('--title-lift');glyph.style.removeProperty('--title-shift')});
+ titleGlyphs.forEach(glyph=>['--title-scale','--title-lift','--title-shift','--wave-lift'].forEach(prop=>glyph.style.removeProperty(prop)));
 }
+function startTitleDrag(event){
+ const glyph=event.target.closest('.title-glyph');
+ if(!glyph||event.button!==0||event.pointerType==='touch'||scene.classList.contains('title-intro')||reduced)return;
+ event.preventDefault();clearTimeout(releaseTimer);titleGlyphs.forEach(el=>el.classList.remove('releasing'));clearTitleLens();
+ dragState={glyph,pointerId:event.pointerId,x:event.clientX,y:event.clientY};glyph.classList.add('dragging');glyph.setPointerCapture(event.pointerId);
+}
+function endTitleDrag(event){
+ if(!dragState||event.pointerId!==dragState.pointerId)return;
+ const glyph=dragState.glyph;dragState=null;glyph.classList.remove('dragging');glyph.classList.add('releasing');glyph.style.removeProperty('--drag-x');glyph.style.removeProperty('--drag-y');
+ releaseTimer=setTimeout(()=>glyph.classList.remove('releasing'),800);
+}
+function leaveTitle(){if(!dragState)clearTitleLens()}
+function cancelTitle(event){endTitleDrag(event);clearTitleLens()}
+function playTitleIntro(){if(titlePlayed)return;titlePlayed=true;if(reduced)return;scene.classList.add('title-intro');titleIntroTimer=setTimeout(()=>scene.classList.remove('title-intro'),1600)}
+title.addEventListener('pointerdown',startTitleDrag);
 title.addEventListener('pointermove',moveTitleLens);
-title.addEventListener('pointerleave',clearTitleLens);
-title.addEventListener('pointercancel',clearTitleLens);
+title.addEventListener('pointerup',endTitleDrag);
+title.addEventListener('lostpointercapture',endTitleDrag);
+title.addEventListener('pointerleave',leaveTitle);
+title.addEventListener('pointercancel',cancelTitle);
 
 // Keep the readable string for assistive technology and animate only its visual copy.
 root.querySelectorAll('.device-extra').forEach(group=>{
@@ -121,7 +145,7 @@ root.querySelectorAll('.device-extra').forEach(group=>{
 });
 let started=false;
 const activityObserver=new IntersectionObserver(([entry])=>{
- if(entry.isIntersecting){requestAnimationFrame(alignRoutes);later(alignRoutes,950)}
+ if(entry.isIntersecting){playTitleIntro();requestAnimationFrame(alignRoutes);later(alignRoutes,950)}
  if(entry.isIntersecting&&!started){started=true;automaticTimer=setTimeout(()=>start('plug',{speak:false}),reduced?1:600)}
  if(!entry.isIntersecting&&started){started=false;clearTimeout(automaticTimer);cancelRecognition();cancelPhase();typingReply=false;updateWave();timers.forEach(clearTimeout);timers=[];clearInterval(ticker);clearInterval(replyTicker);stopSpeech();scene.dataset.phase='idle';scene.classList.remove('running','thinking')}
 },{threshold:.15});activityObserver.observe(host);
@@ -142,6 +166,6 @@ function alignRoutes(){
 }
 requestAnimationFrame(alignRoutes);window.addEventListener('resize',alignRoutes);const resizeObserver='ResizeObserver' in window?new ResizeObserver(alignRoutes):null;resizeObserver?.observe(root.querySelector('.stage'));
 
-return () => {clearTitleLens();title.removeEventListener('pointermove',moveTitleLens);title.removeEventListener('pointerleave',clearTitleLens);title.removeEventListener('pointercancel',clearTitleLens);restorePage();cancelPhase();clearTimeout(closeTimer);root.removeEventListener('keydown',onOverlayKeyDown);activityObserver.disconnect();resizeObserver?.disconnect();window.removeEventListener('resize',alignRoutes);clearTimeout(automaticTimer);timers.forEach(clearTimeout);clearInterval(ticker);clearInterval(replyTicker);cancelRecognition();stopSpeech();};
+return () => {clearTitleLens();clearTimeout(titleIntroTimer);clearTimeout(releaseTimer);title.removeEventListener('pointerdown',startTitleDrag);title.removeEventListener('pointermove',moveTitleLens);title.removeEventListener('pointerup',endTitleDrag);title.removeEventListener('lostpointercapture',endTitleDrag);title.removeEventListener('pointerleave',leaveTitle);title.removeEventListener('pointercancel',cancelTitle);restorePage();cancelPhase();clearTimeout(closeTimer);root.removeEventListener('keydown',onOverlayKeyDown);activityObserver.disconnect();resizeObserver?.disconnect();window.removeEventListener('resize',alignRoutes);clearTimeout(automaticTimer);timers.forEach(clearTimeout);clearInterval(ticker);clearInterval(replyTicker);cancelRecognition();stopSpeech();};
 
 }
