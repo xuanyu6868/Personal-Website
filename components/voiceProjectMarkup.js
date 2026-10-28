@@ -138,6 +138,7 @@ export const voiceStyles = `
 .hotspot-note{position:absolute;right:12px;bottom:12px;max-width:min(300px,80%);padding:10px 13px;background:#0c2928ed;color:#e8fff8;font-size:12px;line-height:1.6;border-radius:6px;box-shadow:0 6px 24px #0004}.hotspot-note[hidden]{display:none}
 @media(prefers-reduced-motion:reduce){.signal-ghost{animation:none}.scene[data-wave=reply] .speech-top .mic i{animation:none;transform:scaleY(.7);opacity:1}}
 /* A soft magnifying lens follows the pointer without reflowing the headline. */
+.headline h1{letter-spacing:.04em}
 .headline h1 .title-glyph{display:inline-block;color:inherit;transform-origin:50% 82%}
 .headline h1 .title-accent{color:var(--mint)}
 @media(hover:hover) and (prefers-reduced-motion:no-preference){.headline h1 .title-glyph{transform:translate(var(--title-shift,0px),var(--title-lift,0px)) scale(var(--title-scale,1));transition:transform .22s cubic-bezier(.2,.7,.25,1)}}
