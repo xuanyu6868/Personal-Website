@@ -75,6 +75,38 @@ micButton.addEventListener('click',()=>{
  try{recognition.start()}catch{activeRecognition=null;micButton.setAttribute('aria-pressed','false');micButton.textContent='🎙 点击说话';note('语音识别暂时无法启动，请重试或使用上方按钮。')}
 });
 
+
+// Let the headline behave like a soft lens, with nearby characters responding gradually.
+const title=root.querySelector('.headline h1');
+const titleGlyphs=[...title.querySelectorAll('.title-glyph')];
+let titleFrame=null, titlePointer=null;
+function updateTitleLens(){
+ titleFrame=null;if(!titlePointer)return;
+ titleGlyphs.forEach(glyph=>{
+  const rect=glyph.getBoundingClientRect();
+  const dx=(titlePointer.x-(rect.left+rect.width/2))/Math.max(rect.width,1);
+  const dy=(titlePointer.y-(rect.top+rect.height/2))/Math.max(rect.height,1);
+  const distance=Math.hypot(dx,dy*.7);
+  const influence=Math.max(0,1-distance/1.65);
+  const smooth=influence*influence*(3-2*influence);
+  glyph.style.setProperty('--title-scale',(1+smooth*.22).toFixed(3));
+  glyph.style.setProperty('--title-shift',(-dx*smooth*14).toFixed(2)+'px');
+  glyph.style.setProperty('--title-lift',(-smooth*6).toFixed(2)+'px');
+ });
+}
+function moveTitleLens(event){
+ if(event.pointerType==='touch'||!matchMedia('(hover: hover) and (prefers-reduced-motion: no-preference)').matches)return;
+ titlePointer={x:event.clientX,y:event.clientY};
+ if(titleFrame===null)titleFrame=requestAnimationFrame(updateTitleLens);
+}
+function clearTitleLens(){
+ titlePointer=null;if(titleFrame!==null){cancelAnimationFrame(titleFrame);titleFrame=null}
+ titleGlyphs.forEach(glyph=>{glyph.style.removeProperty('--title-scale');glyph.style.removeProperty('--title-lift');glyph.style.removeProperty('--title-shift')});
+}
+title.addEventListener('pointermove',moveTitleLens);
+title.addEventListener('pointerleave',clearTitleLens);
+title.addEventListener('pointercancel',clearTitleLens);
+
 // Keep the readable string for assistive technology and animate only its visual copy.
 root.querySelectorAll('.device-extra').forEach(group=>{
  let cursor=0;
@@ -110,6 +142,6 @@ function alignRoutes(){
 }
 requestAnimationFrame(alignRoutes);window.addEventListener('resize',alignRoutes);const resizeObserver='ResizeObserver' in window?new ResizeObserver(alignRoutes):null;resizeObserver?.observe(root.querySelector('.stage'));
 
-return () => {restorePage();cancelPhase();clearTimeout(closeTimer);root.removeEventListener('keydown',onOverlayKeyDown);activityObserver.disconnect();resizeObserver?.disconnect();window.removeEventListener('resize',alignRoutes);clearTimeout(automaticTimer);timers.forEach(clearTimeout);clearInterval(ticker);clearInterval(replyTicker);cancelRecognition();stopSpeech();};
+return () => {clearTitleLens();title.removeEventListener('pointermove',moveTitleLens);title.removeEventListener('pointerleave',clearTitleLens);title.removeEventListener('pointercancel',clearTitleLens);restorePage();cancelPhase();clearTimeout(closeTimer);root.removeEventListener('keydown',onOverlayKeyDown);activityObserver.disconnect();resizeObserver?.disconnect();window.removeEventListener('resize',alignRoutes);clearTimeout(automaticTimer);timers.forEach(clearTimeout);clearInterval(ticker);clearInterval(replyTicker);cancelRecognition();stopSpeech();};
 
 }
