@@ -1,18 +1,95 @@
 export function initVoiceProject(root, host) {
 
-const scene=root.getElementById('scene'),text=root.getElementById('utterance'),status=root.getElementById('status'),speechLabel=root.getElementById('speech-label');let timers=[],ticker=null,replyTicker=null,activeRecognition=null,automaticTimer=null,soundEnabled=true,activeUtterance=null;const reduced=matchMedia('(prefers-reduced-motion: reduce)').matches;const examples={plug:{say:'帮我打开灯带。',reply:'好的，灯带已打开。'},light:{say:'帮我打开显示器挂灯。',reply:'好的，挂灯已打开。'},ac:{say:'帮我打开空调。',reply:'好的，空调指令已发送。'}};function later(fn,ms){timers.push(setTimeout(fn,ms))}function current(id){root.querySelectorAll('.timeline-list span').forEach(s=>s.classList.remove('current'));root.getElementById('step-'+id).classList.add('current')}function start(key,opts={}){clearTimeout(automaticTimer);cancelRecognition();stopSpeech();timers.forEach(clearTimeout);timers=[];clearInterval(ticker);clearInterval(replyTicker);const ex=examples[key], spokenText=opts.inputText||ex.say;scene.dataset.device=key;scene.classList.remove('running','thinking','complete');root.querySelectorAll('[data-item]').forEach(el=>el.classList.remove('selected'));root.querySelectorAll('[data-command]').forEach(b=>b.setAttribute('aria-pressed',String(b.dataset.command===key)));text.textContent='';root.getElementById('reply').textContent='';speechLabel.textContent='正在聆听';status.textContent='互动演示 · 正在识别';current('listen');let i=0;const interval=reduced?1:115;ticker=setInterval(()=>{text.textContent=spokenText.slice(0,++i);if(i>=spokenText.length){clearInterval(ticker);later(()=>{scene.classList.add('running','thinking');speechLabel.textContent='识别完成';status.textContent='互动演示 · 助手正在理解';current('think')},reduced?1:300);later(()=>{scene.classList.remove('thinking');root.querySelector('[data-item="'+key+'"]').classList.add('selected');status.textContent='互动演示 · 指令传递到设备';current('act')},reduced?2:1800);later(()=>{scene.classList.remove('running');scene.classList.add('complete');status.textContent='互动演示，不控制真实设备';current('reply');if(opts.speak!==false)speakReply(ex.reply);let n=0;const reply=root.getElementById('reply');replyTicker=setInterval(()=>{reply.textContent=ex.reply.slice(0,++n);if(n>=ex.reply.length)clearInterval(replyTicker)},reduced?1:95)},reduced?3:2800)}},interval)}root.querySelectorAll('[data-command]').forEach(b=>b.addEventListener('click',()=>{unlockSound();start(b.dataset.command)}));
-const images={voice:{title:'语音交互界面',src:'/projects/dsh-voice-assistant/02-voice-interface-preview.png',alt:'语音助手界面静态预览',note:'语音界面为静态组件预览'},home:{title:'米家控制台',src:'/projects/dsh-voice-assistant/05-mijia-console-overview.webp',alt:'米家控制台真实运行截图',note:'米家控制台真实运行截图'},plug:{title:'灯带 · 设备详情',src:'/projects/dsh-voice-assistant/06-mijia-plug-energy-detail.webp',alt:'智能插座设备详情真实截图',note:'设备详情真实运行截图'},light:{title:'显示器挂灯 · 控制界面',src:'/projects/dsh-voice-assistant/07-mijia-lightbar-control.webp',alt:'显示器挂灯控制真实截图',note:'设备控制真实运行截图'}};const overlay=root.getElementById('overlay');let lastFocus, previousOverflow, previousOverlay, closeTimer;function restorePage(){if(previousOverflow!==undefined){document.body.style.overflow=previousOverflow;previousOverflow=undefined;if(previousOverlay===undefined)delete document.body.dataset.overlayOpen;else document.body.dataset.overlayOpen=previousOverlay}}function show(key){const item=images[key];root.getElementById('viewer-title').textContent=item.title;const img=root.getElementById('viewer-image');img.src=item.src;img.alt=item.alt;root.getElementById('viewer-note').textContent=item.note;root.querySelectorAll('.viewer-tabs button').forEach(b=>b.setAttribute('aria-pressed',String(b.dataset.view===key)))}function openViewer(key){clearTimeout(closeTimer);lastFocus=root.activeElement;previousOverflow=document.body.style.overflow;previousOverlay=document.body.dataset.overlayOpen;document.body.style.overflow='hidden';document.body.dataset.overlayOpen='true';show(key);const rect=lastFocus.getBoundingClientRect();overlay.style.setProperty('--origin-x',(rect.left+rect.width/2-window.innerWidth/2)+'px');overlay.style.setProperty('--origin-y',(rect.top+rect.height/2-window.innerHeight/2)+'px');overlay.classList.add('mounted');requestAnimationFrame(()=>requestAnimationFrame(()=>overlay.classList.add('open')));root.getElementById('close').focus()}function closeViewer(){overlay.classList.remove('open');restorePage();closeTimer=setTimeout(()=>{overlay.classList.remove('mounted');if(lastFocus)lastFocus.focus()},reduced?0:650)}root.getElementById('open-interface').addEventListener('click',()=>openViewer('voice'));root.querySelectorAll('.details').forEach(b=>b.addEventListener('click',()=>openViewer(b.dataset.view)));root.querySelectorAll('.viewer-tabs button').forEach(b=>b.addEventListener('click',()=>show(b.dataset.view)));root.getElementById('close').addEventListener('click',closeViewer);overlay.addEventListener('click',e=>{if(e.target===overlay)closeViewer()});function onOverlayKeyDown(e){if(!overlay.classList.contains('open'))return;if(e.key==='PageUp'||e.key==='PageDown'){e.stopPropagation();return}if(e.key==='Escape'){closeViewer();return}if(e.key==='Tab'){const focusable=[root.getElementById('close'),...root.querySelectorAll('.viewer-tabs button')];const first=focusable[0],last=focusable[focusable.length-1];if(e.shiftKey&&root.activeElement===first){e.preventDefault();last.focus()}else if(!e.shiftKey&&root.activeElement===last){e.preventDefault();first.focus()}}}root.addEventListener('keydown',onOverlayKeyDown);
+const scene=root.getElementById('scene'),text=root.getElementById('utterance'),status=root.getElementById('status'),speechLabel=root.getElementById('speech-label');
+let timers=[],ticker=null,replyTicker=null,activeRecognition=null,automaticTimer=null,soundEnabled=true,activeUtterance=null;
+let phaseTimer=null,phaseJob=null,signalAnimation=null,signalPaused=false,typingReply=false,speakingReply=false;
+const reduced=matchMedia('(prefers-reduced-motion: reduce)').matches;
+const examples={plug:{say:'帮我打开灯带。',reply:'好的，灯带已打开。',target:'灯带'},light:{say:'帮我打开显示器挂灯。',reply:'好的，挂灯已打开。',target:'显示器挂灯'},ac:{say:'帮我打开空调。',reply:'好的，空调指令已发送。',target:'空调'}};
+const signal=root.getElementById('signal');let routePaths={};
+function later(fn,ms){timers.push(setTimeout(fn,ms))}
+function current(id){root.querySelectorAll('.timeline-list span').forEach(s=>s.classList.remove('current'));root.getElementById('step-'+id).classList.add('current')}
+function updateWave(){scene.dataset.wave=(typingReply||speakingReply)?'reply':'rest'}
+function cancelPhase(){clearTimeout(phaseTimer);phaseTimer=null;phaseJob=null;signalPaused=false;delete scene.dataset.paused;if(signalAnimation){signalAnimation.cancel();signalAnimation=null}signal.classList.remove('visible','inspecting','dragging');signal.style.removeProperty('--capsule-x');signal.style.removeProperty('--capsule-y');capsuleDrag=null;signal.setAttribute('aria-expanded','false')}
+function phaseLater(fn,ms){phaseJob={fn,remaining:ms,started:performance.now()};if(!signalPaused)phaseTimer=setTimeout(runPhase,ms)}
+function runPhase(){const job=phaseJob;phaseJob=null;phaseTimer=null;if(job)job.fn()}
+function pauseSignal(){if(signalPaused||!signal.classList.contains('visible'))return;signalPaused=true;scene.dataset.paused='true';if(phaseJob&&phaseTimer){clearTimeout(phaseTimer);phaseTimer=null;phaseJob.remaining=Math.max(0,phaseJob.remaining-(performance.now()-phaseJob.started))}signalAnimation?.pause()}
+function resumeSignal(force=false){if(!signalPaused||(!force&&(signal.classList.contains('inspecting')||signal.matches(':hover')||root.activeElement===signal)))return;signalPaused=false;delete scene.dataset.paused;signalAnimation?.play();if(phaseJob){phaseJob.started=performance.now();phaseTimer=setTimeout(runPhase,phaseJob.remaining)}}
+signal.addEventListener('pointerenter',pauseSignal);signal.addEventListener('pointerleave',()=>resumeSignal());signal.addEventListener('focus',pauseSignal);signal.addEventListener('blur',()=>{signal.classList.remove('inspecting');signal.setAttribute('aria-expanded','false');resumeSignal()});signal.addEventListener('click',()=>{if(capsuleDragged){capsuleDragged=false;return}const inspecting=!signal.classList.contains('inspecting');signal.classList.toggle('inspecting',inspecting);signal.setAttribute('aria-expanded',String(inspecting));if(inspecting)pauseSignal();else resumeSignal(true)});
+let capsuleDrag=null,capsuleDragged=false;
+signal.addEventListener('pointerdown',event=>{if(event.button!==0||!signal.classList.contains('visible'))return;pauseSignal();capsuleDrag={pointerId:event.pointerId,x:event.clientX,y:event.clientY};capsuleDragged=false;signal.classList.add('dragging');signal.setPointerCapture(event.pointerId)});
+signal.addEventListener('pointermove',event=>{if(!capsuleDrag||event.pointerId!==capsuleDrag.pointerId)return;const dx=event.clientX-capsuleDrag.x,dy=event.clientY-capsuleDrag.y;if(Math.hypot(dx,dy)>4)capsuleDragged=true;signal.style.setProperty('--capsule-x',(Math.tanh(dx/75)*55).toFixed(1)+'px');signal.style.setProperty('--capsule-y',(Math.tanh(dy/55)*40).toFixed(1)+'px')});
+function releaseCapsule(event){if(!capsuleDrag||event.pointerId!==capsuleDrag.pointerId)return;capsuleDrag=null;signal.classList.remove('dragging');signal.style.removeProperty('--capsule-x');signal.style.removeProperty('--capsule-y');if(capsuleDragged){signal.classList.add('inspecting');signal.setAttribute('aria-expanded','true')}}
+signal.addEventListener('pointerup',releaseCapsule);signal.addEventListener('pointercancel',releaseCapsule);signal.addEventListener('lostpointercapture',releaseCapsule);
+function showSignal(key,direction,duration){
+ alignRoutes();const path=direction==='inbound'?routePaths.incoming:routePaths[key];if(!path||reduced)return;
+ root.getElementById('signal-target').textContent=examples[key].target;
+ root.getElementById('signal-info').textContent='操作：打开 · 目标：'+examples[key].target;
+ signal.setAttribute('aria-label','指令胶囊：打开'+examples[key].target+'，点击展开或拖动');
+ signal.style.offsetPath=`path("${path}")`;signal.style.offsetAnchor='50% 50%';signal.classList.add('visible');
+ signalAnimation?.cancel();signalAnimation=signal.animate([{offsetDistance:'0%'},{offsetDistance:'100%'}],{duration,easing:'ease-in-out',fill:'both'});
+}
+function dissolveSignal(){if(!signal.classList.contains('visible'))return;const r=signal.getBoundingClientRect(),stage=root.querySelector('.stage').getBoundingClientRect();const ghost=document.createElement('span');ghost.className='signal-ghost';ghost.setAttribute('aria-hidden','true');ghost.textContent='打开 · '+(examples[scene.dataset.device]?.target||'');ghost.style.left=(r.left-stage.left)+'px';ghost.style.top=(r.top-stage.top)+'px';root.querySelector('.stage').appendChild(ghost);setTimeout(()=>ghost.remove(),450)}
+function start(key,opts={}) {
+ clearTimeout(automaticTimer);cancelRecognition();stopSpeech();dissolveSignal();cancelPhase();timers.forEach(clearTimeout);timers=[];clearInterval(ticker);clearInterval(replyTicker);typingReply=false;updateWave();
+ const ex=examples[key],spokenText=opts.inputText||ex.say;scene.classList.remove('has-device');scene.dataset.device=key;scene.dataset.phase='listen';scene.classList.remove('running','thinking','complete');
+ root.querySelectorAll('[data-item]').forEach(el=>el.classList.remove('selected'));
+ root.querySelectorAll('[data-command]').forEach(b=>b.setAttribute('aria-pressed',String(b.dataset.command===key)));
+ text.textContent='';root.getElementById('reply').textContent='';speechLabel.textContent='正在聆听';status.textContent='互动演示 · 正在识别';current('listen');
+ let i=0;const interval=reduced?1:115;
+ ticker=setInterval(()=>{
+  text.textContent=spokenText.slice(0,++i);if(i<spokenText.length)return;clearInterval(ticker);
+  scene.dataset.phase='inbound';pluckRibbon();speechLabel.textContent='识别完成';status.textContent='互动演示 · 语音传入助手';showSignal(key,'inbound',1600);
+  phaseLater(()=>{signal.classList.remove('visible');scene.dataset.phase='think';scene.classList.add('thinking');status.textContent='互动演示 · 助手理解指令';current('think');
+   phaseLater(()=>{scene.dataset.phase='outbound';scene.classList.remove('thinking');status.textContent='互动演示 · 指令传向设备';current('act');showSignal(key,'outbound',1600);
+    phaseLater(()=>{signal.classList.remove('visible');scene.dataset.phase='device';showDeviceScene();root.querySelector('[data-item="'+key+'"]').classList.add('selected');status.textContent='互动演示 · 设备响应';
+     phaseLater(()=>{scene.dataset.phase='return';status.textContent='互动演示 · 响应返回助手';
+      phaseLater(()=>{scene.dataset.phase='reply';scene.classList.add('complete');status.textContent='互动演示，不控制真实设备';current('reply');typingReply=true;updateWave();if(opts.speak!==false)speakReply(ex.reply);let n=0;const reply=root.getElementById('reply');replyTicker=setInterval(()=>{reply.textContent=ex.reply.slice(0,++n);if(n>=ex.reply.length){clearInterval(replyTicker);typingReply=false;updateWave()}},reduced?1:95)},reduced?1:1100)
+     },reduced?1:850)
+    },reduced?1:1600)
+   },reduced?1:750)
+  },reduced?1:1600)
+ },interval);
+}
+root.querySelectorAll('[data-command]').forEach(b=>b.addEventListener('click',()=>{unlockSound();start(b.dataset.command)}));
+root.querySelectorAll('[data-device-trigger]').forEach(b=>b.addEventListener('click',()=>{unlockSound();start(b.dataset.deviceTrigger)}));
+const images={voice:{title:'语音交互界面',src:'/projects/dsh-voice-assistant/02-voice-interface-preview.png',alt:'语音助手界面静态预览',note:'语音界面为静态组件预览'},home:{title:'米家控制台',src:'/projects/dsh-voice-assistant/05-mijia-console-overview.webp',alt:'米家控制台真实运行截图',note:'米家控制台真实运行截图'},plug:{title:'灯带 · 设备详情',src:'/projects/dsh-voice-assistant/06-mijia-plug-energy-detail.webp',alt:'智能插座设备详情真实截图',note:'设备详情真实运行截图'},light:{title:'显示器挂灯 · 控制界面',src:'/projects/dsh-voice-assistant/07-mijia-lightbar-control.webp',alt:'显示器挂灯控制真实截图',note:'设备控制真实运行截图'}};const overlay=root.getElementById('overlay');let lastFocus, previousOverflow, previousOverlay, closeTimer;function restorePage(){if(previousOverflow!==undefined){document.body.style.overflow=previousOverflow;previousOverflow=undefined;if(previousOverlay===undefined)delete document.body.dataset.overlayOpen;else document.body.dataset.overlayOpen=previousOverlay}}const hotspot=root.getElementById('viewer-hotspot'),hotspotNote=root.getElementById('hotspot-note');const hotspotDetails={plug:{x:'44.4%',y:'22%',text:'截图中的灯带开关：演示指令的目标设备。'},light:{x:'69.2%',y:'22%',text:'截图中的挂灯开关：对应“打开挂灯”指令。'},home:{x:'94.1%',y:'22%',text:'截图中的空调伴侣开关：展示设备在米家控制台中的位置。'}};hotspot.addEventListener('click',()=>{const expanded=hotspot.getAttribute('aria-expanded')!=='true';hotspot.setAttribute('aria-expanded',String(expanded));hotspotNote.hidden=!expanded});function show(key){const item=images[key];const mark=hotspotDetails[key];hotspot.hidden=!mark;hotspotNote.hidden=true;hotspot.setAttribute('aria-expanded','false');if(mark){hotspot.style.setProperty('--hot-x',mark.x);hotspot.style.setProperty('--hot-y',mark.y);hotspotNote.textContent=mark.text;hotspot.setAttribute('aria-label','查看截图说明：'+mark.text)}root.getElementById('viewer-title').textContent=item.title;const img=root.getElementById('viewer-image');img.src=item.src;img.alt=item.alt;root.getElementById('viewer-note').textContent=item.note;root.querySelectorAll('.viewer-tabs button').forEach(b=>b.setAttribute('aria-pressed',String(b.dataset.view===key)))}function openViewer(key){resetCurtain();clearTimeout(closeTimer);lastFocus=root.activeElement;previousOverflow=document.body.style.overflow;previousOverlay=document.body.dataset.overlayOpen;document.body.style.overflow='hidden';document.body.dataset.overlayOpen='true';show(key);const origin=lastFocus.closest('.device')?.querySelector('.device-trigger')||lastFocus;const rect=origin.getBoundingClientRect();overlay.style.setProperty('--origin-x',(rect.left+rect.width/2-window.innerWidth/2)+'px');overlay.style.setProperty('--origin-y',(rect.top+rect.height/2-window.innerHeight/2)+'px');overlay.classList.add('mounted');requestAnimationFrame(()=>requestAnimationFrame(()=>overlay.classList.add('open')));root.getElementById('close').focus()}function closeViewer(){overlay.classList.remove('open');restorePage();closeTimer=setTimeout(()=>{overlay.classList.remove('mounted');resetCurtain();if(lastFocus)lastFocus.focus()},reduced?0:650)}root.getElementById('open-interface').addEventListener('click',()=>openViewer('voice'));root.querySelectorAll('.details').forEach(b=>b.addEventListener('click',()=>openViewer(b.dataset.view)));root.querySelectorAll('.viewer-tabs button').forEach(b=>b.addEventListener('click',()=>{resetCurtain();show(b.dataset.view)}));root.getElementById('close').addEventListener('click',closeViewer);overlay.addEventListener('click',e=>{if(e.target===overlay)closeViewer()});function onOverlayKeyDown(e){if(!overlay.classList.contains('open'))return;if(e.key==='PageUp'||e.key==='PageDown'){e.stopPropagation();return}if(e.key==='Escape'){closeViewer();return}if(e.key==='Tab'){const focusable=[root.getElementById('close'),...(overlay.classList.contains('curtain-mode')?[curtainRange,...(overlay.classList.contains('curtain-open')&&!hotspot.hidden?[hotspot]:[])]:hotspot.hidden?[]:[hotspot]),...root.querySelectorAll('.viewer-tabs button')];const first=focusable[0],last=focusable[focusable.length-1];if(e.shiftKey&&root.activeElement===first){e.preventDefault();last.focus()}else if(!e.shiftKey&&root.activeElement===last){e.preventDefault();first.focus()}}}root.addEventListener('keydown',onOverlayKeyDown);
+
+
+// Make the screenshot portal available after a device responds.
+const portalTrigger=root.getElementById('portal-trigger');
+function showDeviceScene(){scene.classList.add('has-device')}
+
+// A damped string reacts to a pluck and to each demonstration command.
+const ribbon=root.getElementById('sound-ribbon'),ribbonLine=ribbon.querySelector('.ribbon-line'),ribbonEcho=ribbon.querySelector('.ribbon-echo');
+let ribbonAmount=0,ribbonSpeed=0,ribbonCenter=.5,ribbonFrame=null,ribbonDragging=false,ribbonPointer=null;
+function drawRibbon(){let d='M 0 30';for(let x=0;x<=360;x+=6){const t=x/360;const envelope=Math.exp(-Math.pow((t-ribbonCenter)/.27,2));const oscillation=Math.cos((t-ribbonCenter)*Math.PI*6);const y=30+Math.sin(t*Math.PI*8)*2.5*Math.sin(Math.PI*t)+ribbonAmount*envelope*oscillation;d+=' L '+x+' '+y.toFixed(2)}ribbonLine.setAttribute('d',d);ribbonEcho.setAttribute('d',d)}
+function tickRibbon(){ribbonFrame=null;if(!ribbonDragging){ribbonSpeed=(ribbonSpeed-ribbonAmount*.24)*.94;ribbonAmount+=ribbonSpeed}drawRibbon();if(ribbonDragging||Math.abs(ribbonAmount)>.04||Math.abs(ribbonSpeed)>.04)ribbonFrame=requestAnimationFrame(tickRibbon);else{ribbonAmount=0;ribbonSpeed=0;drawRibbon()}}
+drawRibbon();
+function animateRibbon(){if(!ribbonFrame&&!reduced)ribbonFrame=requestAnimationFrame(tickRibbon)}
+function pluckRibbon(force=25){if(reduced)return;ribbonAmount=Math.max(-26,Math.min(26,force));ribbonSpeed=0;animateRibbon()}
+function moveRibbon(event){if(!ribbonDragging||event.pointerId!==ribbonPointer)return;const rect=ribbon.querySelector('svg').getBoundingClientRect();ribbonCenter=Math.max(.08,Math.min(.92,(event.clientX-rect.left)/rect.width));ribbonAmount=Math.max(-26,Math.min(26,(event.clientY-(rect.top+rect.height/2))*2));drawRibbon()}
+ribbon.addEventListener('pointerdown',event=>{if(event.button!==0)return;ribbonDragging=true;ribbonPointer=event.pointerId;ribbon.setPointerCapture(event.pointerId);moveRibbon(event);animateRibbon()});
+function releaseRibbon(event){if(!ribbonDragging||event.pointerId!==ribbonPointer)return;ribbonDragging=false;ribbonPointer=null;if(reduced){ribbonAmount=0;drawRibbon();return}if(Math.abs(ribbonAmount)<2)ribbonAmount=23;animateRibbon()}
+ribbon.addEventListener('pointermove',moveRibbon);ribbon.addEventListener('pointerup',releaseRibbon);ribbon.addEventListener('pointercancel',releaseRibbon);ribbon.addEventListener('lostpointercapture',releaseRibbon);
+ribbon.addEventListener('click',event=>{if(event.detail===0)pluckRibbon()});
+
+// A slider pulls both halves of the project window apart symmetrically.
+const curtainRange=root.getElementById('curtain-range'),viewerVisual=root.querySelector('.viewer-visual');
+function resetCurtain(){overlay.classList.remove('curtain-mode','curtain-open');curtainRange.value='4';viewerVisual.style.removeProperty('--aperture')}
+function openPortal(){const key=scene.dataset.device==='plug'?'plug':scene.dataset.device==='light'?'light':'home';openViewer(key);overlay.classList.add('curtain-mode');curtainRange.value='4';viewerVisual.style.setProperty('--aperture','4%');curtainRange.focus()}
+portalTrigger.addEventListener('click',openPortal);
+curtainRange.addEventListener('input',()=>{viewerVisual.style.setProperty('--aperture',curtainRange.value+'%');overlay.classList.toggle('curtain-open',Number(curtainRange.value)>=99)});
 
 const micButton=root.getElementById('mic-button'), soundButton=root.getElementById('sound-button'), voiceNote=root.getElementById('voice-note');
 const Recognition=window.SpeechRecognition||window.webkitSpeechRecognition;
 function note(message){voiceNote.textContent=message}
 function unlockSound(){if('speechSynthesis' in window)window.speechSynthesis.resume()}
-function stopSpeech(){if(activeUtterance && 'speechSynthesis' in window){activeUtterance=null;window.speechSynthesis.cancel()}}
+function stopSpeech(){if(activeUtterance && 'speechSynthesis' in window){activeUtterance=null;window.speechSynthesis.cancel()}speakingReply=false;updateWave()}
 function speakReply(message){
  if(!soundEnabled)return;
  if(!('speechSynthesis' in window)){note('此浏览器不支持语音朗读，回复仍会以文字显示。');return}
  const utterance=new SpeechSynthesisUtterance(message);utterance.lang='zh-CN';const voice=window.speechSynthesis.getVoices().find(v=>/^zh(-|_)/i.test(v.lang));if(voice)utterance.voice=voice;utterance.rate=1;
- utterance.onerror=(event)=>{if(activeUtterance!==utterance)return;activeUtterance=null;if(event.error!=='interrupted'&&event.error!=='canceled')note('语音朗读未能播放，请检查浏览器和系统声音。')};utterance.onend=()=>{if(activeUtterance===utterance)activeUtterance=null};activeUtterance=utterance;window.speechSynthesis.speak(utterance);
+ utterance.onstart=()=>{if(activeUtterance===utterance){speakingReply=true;updateWave()}};utterance.onerror=(event)=>{if(activeUtterance!==utterance)return;activeUtterance=null;speakingReply=false;updateWave();if(event.error!=='interrupted'&&event.error!=='canceled')note('语音朗读未能播放，请检查浏览器和系统声音。')};utterance.onend=()=>{if(activeUtterance===utterance){activeUtterance=null;speakingReply=false;updateWave()}};activeUtterance=utterance;window.speechSynthesis.speak(utterance);
 }
 function cancelRecognition(){if(!activeRecognition)return;const previous=activeRecognition;activeRecognition=null;micButton.setAttribute('aria-pressed','false');micButton.textContent='🎙 点击说话';try{previous.abort()}catch{}}
 function parseCommand(raw){const t=raw.replace(/\s/g,'');if(/关闭|关掉|关上|不要|别|不开|调暗/.test(t))return null;if(!/打开|开启|开一下|开下|帮我开|开/.test(t))return null;if(/灯带|插座/.test(t))return 'plug';if(/挂灯|显示器灯|屏幕灯/.test(t))return 'light';if(/空调/.test(t))return 'ac';return null}
@@ -21,13 +98,69 @@ if(!Recognition){micButton.disabled=true;note('此浏览器暂不支持语音识
 micButton.addEventListener('click',()=>{
  if(activeRecognition){cancelRecognition();note('已停止聆听。');speechLabel.textContent='已停止聆听';return}
  if(!Recognition)return;
- clearTimeout(automaticTimer);unlockSound();stopSpeech();timers.forEach(clearTimeout);timers=[];clearInterval(ticker);clearInterval(replyTicker);scene.classList.remove('running','thinking','complete');root.querySelectorAll('[data-item]').forEach(el=>el.classList.remove('selected'));root.querySelectorAll('[data-command]').forEach(b=>b.setAttribute('aria-pressed','false'));text.textContent='';root.getElementById('reply').textContent='';current('listen');speechLabel.textContent='正在聆听';status.textContent='互动演示 · 等待语音';note('正在聆听，请说“打开灯带”“打开挂灯”或“打开空调”。');
+ clearTimeout(automaticTimer);unlockSound();stopSpeech();dissolveSignal();cancelPhase();typingReply=false;updateWave();timers.forEach(clearTimeout);timers=[];clearInterval(ticker);clearInterval(replyTicker);scene.dataset.phase='listen';scene.classList.remove('running','thinking','complete');root.querySelectorAll('[data-item]').forEach(el=>el.classList.remove('selected'));root.querySelectorAll('[data-command]').forEach(b=>b.setAttribute('aria-pressed','false'));text.textContent='';root.getElementById('reply').textContent='';current('listen');speechLabel.textContent='正在聆听';status.textContent='互动演示 · 等待语音';note('正在聆听，请说“打开灯带”“打开挂灯”或“打开空调”。');
  const recognition=new Recognition();activeRecognition=recognition;recognition.lang='zh-CN';recognition.continuous=false;recognition.interimResults=true;recognition.maxAlternatives=1;micButton.setAttribute('aria-pressed','true');micButton.textContent='■ 停止聆听';let gotFinal=false;
  recognition.onresult=event=>{if(activeRecognition!==recognition)return;let partial='',final='';for(let i=event.resultIndex;i<event.results.length;i++){const result=event.results[i];if(result.isFinal)final+=result[0].transcript;else partial+=result[0].transcript}text.textContent=final||partial;if(!final)return;gotFinal=true;const key=parseCommand(final);activeRecognition=null;micButton.setAttribute('aria-pressed','false');micButton.textContent='🎙 点击说话';try{recognition.stop()}catch{}if(key){note('已识别语音 · 下方为模拟演示，不控制真实设备。');start(key,{inputText:final,speak:true})}else{speechLabel.textContent='未匹配演示指令';status.textContent='未匹配指令，请再试一次';note('请试着说“打开灯带”“打开挂灯”或“打开空调”。');speakReply('没有听清，请再说一次。')}};
  recognition.onerror=event=>{if(activeRecognition!==recognition)return;activeRecognition=null;micButton.setAttribute('aria-pressed','false');micButton.textContent='🎙 点击说话';speechLabel.textContent='未能识别语音';const errors={'not-allowed':'麦克风权限未开启，请在浏览器设置中允许后重试。','service-not-allowed':'浏览器语音服务不可用，可以使用上方按钮。','no-speech':'没有听到声音，请再试一次。','audio-capture':'未找到可用麦克风，请检查设备。','network':'语音识别网络不可用，可以使用上方按钮。'};note(errors[event.error]||'语音识别未完成，请重试或使用上方按钮。');status.textContent='互动演示，不控制真实设备'};
  recognition.onend=()=>{if(activeRecognition!==recognition)return;activeRecognition=null;micButton.setAttribute('aria-pressed','false');micButton.textContent='🎙 点击说话';if(!gotFinal){speechLabel.textContent='未识别到指令';note('没有识别到指令，请再试一次。');status.textContent='互动演示，不控制真实设备'}};
  try{recognition.start()}catch{activeRecognition=null;micButton.setAttribute('aria-pressed','false');micButton.textContent='🎙 点击说话';note('语音识别暂时无法启动，请重试或使用上方按钮。')}
 });
+
+
+// Pointer-following lens and a short ripple keep the lettering responsive.
+const title=root.querySelector('.headline h1');
+const titleGlyphs=[...title.querySelectorAll('.title-glyph')];
+titleGlyphs.forEach((glyph,i)=>glyph.style.setProperty('--intro-delay',(i*.045)+'s'));
+let titleFrame=null,titlePointer=null,titleMovedAt=0,titlePlayed=false,titleIntroTimer=null,dragState=null,releaseTimer=null;
+function updateTitleLens(now){
+ titleFrame=null;if(!titlePointer||dragState)return;
+ let waveRemaining=false;
+ titleGlyphs.forEach(glyph=>{
+  const rect=glyph.getBoundingClientRect();
+  const dx=(titlePointer.x-(rect.left+rect.width/2))/Math.max(rect.width,1);
+  const dy=(titlePointer.y-(rect.top+rect.height/2))/Math.max(rect.height,1);
+  const distance=Math.hypot(dx,dy*.7),influence=Math.max(0,1-distance/1.65);
+  const smooth=influence*influence*(3-2*influence);
+  const elapsed=now-titleMovedAt-Math.abs(dx)*70;
+  const ripple=elapsed>=0&&elapsed<500?Math.sin(elapsed/500*Math.PI)*Math.max(0,1-distance/2.5):0;
+  if(elapsed<500&&distance<2.5)waveRemaining=true;
+  glyph.style.setProperty('--title-scale',(1+smooth*.22).toFixed(3));
+  glyph.style.setProperty('--title-shift',(-dx*smooth*14).toFixed(2)+'px');
+  glyph.style.setProperty('--title-lift',(-smooth*6).toFixed(2)+'px');
+  glyph.style.setProperty('--wave-lift',(-ripple*4).toFixed(2)+'px');
+ });
+ if(waveRemaining)titleFrame=requestAnimationFrame(updateTitleLens);
+}
+function moveTitleLens(event){
+ if(dragState){if(event.pointerId!==dragState.pointerId)return;dragState.glyph.style.setProperty('--drag-x',(Math.tanh((event.clientX-dragState.x)/35)*20).toFixed(2)+'px');dragState.glyph.style.setProperty('--drag-y',(Math.tanh((event.clientY-dragState.y)/35)*20).toFixed(2)+'px');return}
+ if(event.pointerType==='touch'||scene.classList.contains('title-intro')||!matchMedia('(hover: hover) and (prefers-reduced-motion: no-preference)').matches)return;
+ titlePointer={x:event.clientX,y:event.clientY};titleMovedAt=performance.now();
+ if(titleFrame===null)titleFrame=requestAnimationFrame(updateTitleLens);
+}
+function clearTitleLens(){
+ titlePointer=null;if(titleFrame!==null){cancelAnimationFrame(titleFrame);titleFrame=null}
+ titleGlyphs.forEach(glyph=>['--title-scale','--title-lift','--title-shift','--wave-lift'].forEach(prop=>glyph.style.removeProperty(prop)));
+}
+function startTitleDrag(event){
+ const glyph=event.target.closest('.title-glyph');
+ if(!glyph||event.button!==0||event.pointerType==='touch'||scene.classList.contains('title-intro')||reduced)return;
+ event.preventDefault();clearTimeout(releaseTimer);titleGlyphs.forEach(el=>el.classList.remove('releasing'));clearTitleLens();
+ dragState={glyph,pointerId:event.pointerId,x:event.clientX,y:event.clientY};glyph.classList.add('dragging');glyph.setPointerCapture(event.pointerId);
+}
+function endTitleDrag(event){
+ if(!dragState||event.pointerId!==dragState.pointerId)return;
+ const glyph=dragState.glyph;dragState=null;glyph.classList.remove('dragging');glyph.classList.add('releasing');glyph.style.removeProperty('--drag-x');glyph.style.removeProperty('--drag-y');
+ releaseTimer=setTimeout(()=>glyph.classList.remove('releasing'),800);
+}
+function leaveTitle(){if(!dragState)clearTitleLens()}
+function cancelTitle(event){endTitleDrag(event);clearTitleLens()}
+function playTitleIntro(){if(titlePlayed)return;titlePlayed=true;if(reduced)return;scene.classList.add('title-intro');titleIntroTimer=setTimeout(()=>scene.classList.remove('title-intro'),1600)}
+title.addEventListener('pointerdown',startTitleDrag);
+title.addEventListener('pointermove',moveTitleLens);
+title.addEventListener('pointerup',endTitleDrag);
+title.addEventListener('lostpointercapture',endTitleDrag);
+title.addEventListener('pointerleave',leaveTitle);
+title.addEventListener('pointercancel',cancelTitle);
 
 // Keep the readable string for assistive technology and animate only its visual copy.
 root.querySelectorAll('.device-extra').forEach(group=>{
@@ -43,27 +176,27 @@ root.querySelectorAll('.device-extra').forEach(group=>{
 });
 let started=false;
 const activityObserver=new IntersectionObserver(([entry])=>{
- if(entry.isIntersecting){requestAnimationFrame(alignRoutes);later(alignRoutes,950)}
+ if(entry.isIntersecting){playTitleIntro();requestAnimationFrame(alignRoutes);later(alignRoutes,950)}
  if(entry.isIntersecting&&!started){started=true;automaticTimer=setTimeout(()=>start('plug',{speak:false}),reduced?1:600)}
- if(!entry.isIntersecting&&started){started=false;clearTimeout(automaticTimer);cancelRecognition();timers.forEach(clearTimeout);timers=[];clearInterval(ticker);clearInterval(replyTicker);stopSpeech();scene.classList.remove('running','thinking')}
+ if(!entry.isIntersecting&&started){started=false;clearTimeout(automaticTimer);cancelRecognition();cancelPhase();typingReply=false;updateWave();timers.forEach(clearTimeout);timers=[];clearInterval(ticker);clearInterval(replyTicker);stopSpeech();scene.dataset.phase='idle';scene.classList.remove('running','thinking')}
 },{threshold:.15});activityObserver.observe(host);
 
 // Draw each route from measured visual anchors so it stays clear of icons and labels.
 function alignRoutes(){
  const stage=root.querySelector('.stage'),svg=root.querySelector('.lines');
- if(!stage||!svg||innerWidth<=850)return;
+ if(!stage||!svg)return;
  const bounds=stage.getBoundingClientRect(), core=root.querySelector('.core').getBoundingClientRect();
  const logoWidth=core.width*.64, centerX=core.left-bounds.left+core.width/2, centerY=core.top-bounds.top+core.height/2;
  const quote=root.querySelector('.speech blockquote').getBoundingClientRect();
  const leftEnd=centerX-logoWidth/2-24, leftStart=Math.min(quote.right-bounds.left+20,leftEnd-28);
  const branchStart=centerX+logoWidth/2+24;
  const targets=[...root.querySelectorAll('.device')].map(row=>{const r=row.getBoundingClientRect();return {x:r.left-bounds.left-8,y:r.top-bounds.top+r.height/2}});
- const incoming=`M ${leftStart} ${centerY} L ${leftEnd} ${centerY}`;
- const routes=targets.map(({x,y})=>{const d=Math.max(16,(x-branchStart)*.58);return `M ${branchStart} ${centerY} C ${branchStart+d} ${centerY} ${x-d} ${y} ${x} ${y}`});
- svg.setAttribute('viewBox',`0 0 ${bounds.width} ${bounds.height}`);const paths=svg.querySelectorAll('path');paths[0].setAttribute('d',incoming);paths[1].setAttribute('d',routes.join(' '));paths[2].setAttribute('d',incoming);routes.forEach((d,i)=>paths[i+3].setAttribute('d',d));
+ const incoming=innerWidth<=850?`M ${Math.max(0,quote.right-bounds.left)} ${quote.top-bounds.top+quote.height/2} L ${centerX-logoWidth/2-10} ${centerY}`:`M ${leftStart} ${centerY} L ${leftEnd} ${centerY}`;
+ const routes=targets.map(({x,y},i)=>{if(innerWidth<=850){const r=root.querySelectorAll('.device-trigger')[i].getBoundingClientRect();const tx=r.left-bounds.left+r.width/2,ty=r.top-bounds.top;return `M ${centerX} ${centerY+logoWidth/2} C ${centerX} ${ty-35} ${tx} ${ty-35} ${tx} ${ty}`};const d=Math.max(16,(x-branchStart)*.58);return `M ${branchStart} ${centerY} C ${branchStart+d} ${centerY} ${x-d} ${y} ${x} ${y}`});routePaths={incoming,plug:routes[0],light:routes[1],ac:routes[2]};
+ svg.setAttribute('viewBox',`0 0 ${bounds.width} ${bounds.height}`);const paths=svg.querySelectorAll('path');paths[0].setAttribute('d',incoming);paths[1].setAttribute('d',routes.join(' '));svg.querySelector('.incoming').setAttribute('d',incoming);svg.querySelector('.return-incoming').setAttribute('d',incoming);['plug','light','ac'].forEach((key,i)=>{svg.querySelector('.to-'+key).setAttribute('d',routes[i]);svg.querySelector('.return-'+key).setAttribute('d',routes[i])});
 }
 requestAnimationFrame(alignRoutes);window.addEventListener('resize',alignRoutes);const resizeObserver='ResizeObserver' in window?new ResizeObserver(alignRoutes):null;resizeObserver?.observe(root.querySelector('.stage'));
 
-return () => {restorePage();clearTimeout(closeTimer);root.removeEventListener('keydown',onOverlayKeyDown);activityObserver.disconnect();resizeObserver?.disconnect();window.removeEventListener('resize',alignRoutes);clearTimeout(automaticTimer);timers.forEach(clearTimeout);clearInterval(ticker);clearInterval(replyTicker);cancelRecognition();stopSpeech();};
+return () => {if(ribbonFrame)cancelAnimationFrame(ribbonFrame);clearTitleLens();clearTimeout(titleIntroTimer);clearTimeout(releaseTimer);title.removeEventListener('pointerdown',startTitleDrag);title.removeEventListener('pointermove',moveTitleLens);title.removeEventListener('pointerup',endTitleDrag);title.removeEventListener('lostpointercapture',endTitleDrag);title.removeEventListener('pointerleave',leaveTitle);title.removeEventListener('pointercancel',cancelTitle);restorePage();cancelPhase();clearTimeout(closeTimer);root.removeEventListener('keydown',onOverlayKeyDown);activityObserver.disconnect();resizeObserver?.disconnect();window.removeEventListener('resize',alignRoutes);clearTimeout(automaticTimer);timers.forEach(clearTimeout);clearInterval(ticker);clearInterval(replyTicker);cancelRecognition();stopSpeech();};
 
 }
