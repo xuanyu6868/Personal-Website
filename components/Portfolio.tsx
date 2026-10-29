@@ -14,7 +14,7 @@ import { renderMarkdown } from "../lib/simple-markdown";
 import { projects, type Project, type ProjectVisual as VisualType } from "../data/projects";
 import NoteSyncGallery from "./NoteSyncGallery";
 import VoiceProject from "./VoiceProject";
-import WeiClawBook from "./WeiClawBook";
+import WeiClawBook from "./weiclaw-preview/WeiClawBook";
 import SparkCommerceBelt from "./SparkCommerceBelt";
 import { FrameSequenceCache } from "./frameSequenceCache";
 

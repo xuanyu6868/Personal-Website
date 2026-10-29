@@ -44,7 +44,7 @@ test("defines five distinct WeiClaw book pages with real raster media", () => {
 test("renders the book only in the WeiClaw project scene", () => {
   assert.match(componentSource, /export default function WeiClawBook/);
   assert.match(portfolioSource, /project\.id === "weiclaw"[\s\S]*?<WeiClawBook\s*\/>/);
-  assert.match(portfolioSource, /import WeiClawBook from "\.\/WeiClawBook"/);
+  assert.match(portfolioSource, /import WeiClawBook from "\.\/weiclaw-preview\/WeiClawBook"/);
 });
 
 test("supports pointer drag, edge click, pointer capture, and snap thresholds", () => {
