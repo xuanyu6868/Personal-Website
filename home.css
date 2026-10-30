@@ -146,3 +146,13 @@
   .resume-dialog[open]::backdrop,.resume-dialog.is-closing::backdrop{animation:none}
   .resume-dialog__close:hover{transform:none}
 }
+/* 第一列的内侧留白也属于该项的悬浮区域。 */
+@media(hover:hover){
+  .hero__metrics .hero__metric:first-child::before{content:"";position:absolute;top:0;bottom:0;left:calc(-1 * var(--page-padding));right:100%;background:rgba(53,185,247,.055);opacity:0;transition:opacity .35s ease}
+  .hero__metrics .hero__metric:first-child:hover::before{opacity:1}
+}
+@media(hover:hover) and (max-width:820px){
+  .hero__metrics .hero__metric:nth-child(3)::before{content:"";position:absolute;top:0;bottom:0;left:calc(-1 * var(--page-padding));right:100%;background:rgba(53,185,247,.055);opacity:0;transition:opacity .35s ease}
+  .hero__metrics .hero__metric:nth-child(3):hover::before{opacity:1}
+}
+@media(prefers-reduced-motion:reduce){.hero__metrics .hero__metric::before{transition:none}}
