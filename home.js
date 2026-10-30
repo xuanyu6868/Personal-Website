@@ -55,20 +55,51 @@ requestAnimationFrame(() => marker.classList.add('is-ready'));
 const resumeDialog = document.querySelector('.resume-dialog');
 const resumeOpen = document.querySelector('#resume-open');
 if (resumeDialog && typeof resumeDialog.showModal === 'function') {
+  let closing = false;
+  function closeResume() {
+    if (!resumeDialog.open || closing) return;
+    if (reduced.matches || typeof resumeDialog.animate !== 'function') {
+      resumeDialog.close();
+      return;
+    }
+    closing = true;
+    resumeDialog.classList.add('is-closing');
+    const motion = resumeDialog.animate(
+      [{ opacity: 1, transform: 'translateY(0) scale(1)' },
+       { opacity: 0, transform: 'translateY(12px) scale(.985)' }],
+      { duration: 220, easing: 'ease-in', fill: 'forwards' }
+    );
+    motion.finished.catch(() => {}).then(() => {
+      if (resumeDialog.open) resumeDialog.close();
+      motion.cancel();
+      resumeDialog.classList.remove('is-closing');
+      closing = false;
+    });
+  }
   resumeOpen.addEventListener('click', event => {
     event.preventDefault();
+    if (resumeDialog.open) return;
     resumeDialog.showModal();
+    if (!reduced.matches && typeof resumeDialog.animate === 'function') {
+      resumeDialog.animate(
+        [{ opacity: 0, transform: 'translateY(18px) scale(.98)' },
+         { opacity: 1, transform: 'translateY(0) scale(1)' }],
+        { duration: 420, easing: 'cubic-bezier(.22,1,.36,1)' }
+      );
+    }
   });
-  resumeDialog.querySelector('.resume-dialog__close').addEventListener('click', () => resumeDialog.close());
+  resumeDialog.querySelector('.resume-dialog__close').addEventListener('click', closeResume);
+  resumeDialog.addEventListener('cancel', event => { event.preventDefault(); closeResume(); });
   resumeDialog.addEventListener('click', event => {
-    if (event.target === resumeDialog) resumeDialog.close();
+    if (event.target === resumeDialog) closeResume();
   });
 }
 if (!reduced.matches) {
   document.querySelectorAll('.metric-number').forEach(number => {
-    const target = Number(number.dataset.target), duration = 1000;
+    const target = Number(number.dataset.target), duration = 1100, delay = 700;
     let start;
-    function tick(time) { if (start === undefined) start = time; const progress = Math.min((time - start) / duration, 1); number.textContent = String(Math.round(target * (1 - Math.pow(1 - progress, 3)))); if (progress < 1) requestAnimationFrame(tick); }
+    number.textContent = '0';
+    function tick(time) { if (start === undefined) start = time; const progress = Math.max(0, Math.min((time - start - delay) / duration, 1)); if (time - start >= delay) number.textContent = String(Math.round(target * (1 - Math.pow(1 - progress, 3)))); if (progress < 1) requestAnimationFrame(tick); }
     requestAnimationFrame(tick);
   });
 }
