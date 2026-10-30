@@ -52,6 +52,18 @@ window.addEventListener('resize', () => placeMarker(displayed));
 output.dataset.requested = output.textContent;
 placeMarker(selected);
 requestAnimationFrame(() => marker.classList.add('is-ready'));
+const resumeDialog = document.querySelector('.resume-dialog');
+const resumeOpen = document.querySelector('#resume-open');
+if (resumeDialog && typeof resumeDialog.showModal === 'function') {
+  resumeOpen.addEventListener('click', event => {
+    event.preventDefault();
+    resumeDialog.showModal();
+  });
+  resumeDialog.querySelector('.resume-dialog__close').addEventListener('click', () => resumeDialog.close());
+  resumeDialog.addEventListener('click', event => {
+    if (event.target === resumeDialog) resumeDialog.close();
+  });
+}
 if (!reduced.matches) {
   document.querySelectorAll('.metric-number').forEach(number => {
     const target = Number(number.dataset.target), duration = 1000;
