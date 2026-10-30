@@ -5,7 +5,6 @@ import {
   motion,
   useReducedMotion,
   useScroll,
-  useTransform,
   type MotionValue,
 } from "framer-motion";
 import { createPortal } from "react-dom";
@@ -13,6 +12,7 @@ import { capabilityMenu, techMenu, type CapsMenuNode } from "../data/capabilitie
 import { renderMarkdown } from "../lib/simple-markdown";
 import { projects, type Project, type ProjectVisual as VisualType } from "../data/projects";
 import NoteSyncGallery from "./NoteSyncGallery";
+import HomeHero from "./HomeHero";
 import VoiceProject from "./VoiceProject";
 import WeiClawBook from "./weiclaw-preview/WeiClawBook";
 import SparkCommerceBelt from "./SparkCommerceBelt";
@@ -857,90 +857,6 @@ function Reveal({
     >
       {children}
     </div>
-  );
-}
-
-function Hero() {
-  const heroRef = useRef<HTMLElement>(null);
-  const reduceMotion = useReducedMotion();
-  const { scrollYProgress } = useScroll({
-    target: heroRef,
-    offset: ["start start", "end start"],
-  });
-  const titleY = useTransform(scrollYProgress, [0, 1], [0, reduceMotion ? 0 : 110]);
-  const titleOpacity = useTransform(scrollYProgress, [0, 0.78], [1, reduceMotion ? 1 : 0.12]);
-
-  return (
-    <section className="scene scene--hero hero" data-active="true" data-scene-index="00" data-scene-label="HERO" id="top" ref={heroRef}>
-      <div className="scene__backdrop" aria-hidden="true" />
-      <motion.div className="scene__content" style={{ opacity: 1 }}>
-        <motion.div className="hero__content page-shell" style={{ y: titleY, opacity: titleOpacity }}>
-        <h1 className="hero__title" aria-label="AI Native 全栈工程师">
-          <motion.span
-            className="hero__title-en"
-            initial={{ y: "118%" }}
-            animate={{ y: 0 }}
-            transition={{ delay: 0.18, duration: 1.2, ease: EASE }}
-          >
-            AI-NATIVE
-          </motion.span>
-          <motion.span
-            className="hero__title-cn"
-            initial={{ y: "118%" }}
-            animate={{ y: 0 }}
-            transition={{ delay: 0.34, duration: 1.2, ease: EASE }}
-          >
-            <span className="hero__title-stroke">全栈</span>工程师
-          </motion.span>
-        </h1>
-
-        <motion.div
-          className="hero__lower"
-          initial={{ opacity: 0, y: 24 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.92, duration: 1, ease: EASE }}
-        >
-          <div className="hero__actions">
-            <a className="hero__action" href={`#project-${projects[0]?.id ?? "work"}`}>
-              查看选定作品 <span aria-hidden="true">→</span>
-            </a>
-            <i className="hero__action-divider" aria-hidden="true" />
-            <a className="hero__action" href="#about">
-              点击查看简历 <span aria-hidden="true">→</span>
-            </a>
-          </div>
-        </motion.div>
-
-        <motion.aside
-          className="hero__timeline"
-          initial={{ opacity: 0, x: 24 }}
-          animate={{ opacity: 1, x: 0 }}
-          transition={{ delay: 1.06, duration: 0.9, ease: EASE }}
-          aria-label="经历时间线"
-        >
-          <span className="hero__timeline-line" aria-hidden="true" />
-          <p><i aria-hidden="true" />24 年实习</p>
-          <p><i aria-hidden="true" />25 年做全栈</p>
-          <p><i aria-hidden="true" />26 年毕业做 FDE</p>
-          <p><i aria-hidden="true" /><b>目前钻研</b> 全自动工作流</p>
-        </motion.aside>
-
-        <p className="hero__motto"><span>→</span> 人工智能 <span>→</span> 生产力</p>
-        </motion.div>
-
-      <motion.div
-        className="hero__metrics page-shell"
-        initial={{ opacity: 0 }}
-        animate={{ opacity: 1 }}
-        transition={{ delay: 1.35, duration: 1.2 }}
-      >
-        <div><strong>3+</strong><span>年全栈开发经验</span><i aria-hidden="true" /></div>
-        <div><strong>20+</strong><span>项目交付</span><i aria-hidden="true" /></div>
-        <div><strong>工作流搭建</strong><span>技术驱动 · 价值导向</span><i aria-hidden="true" /></div>
-        <div><strong>端到端交付</strong><span>从想法到上线</span><i aria-hidden="true" /></div>
-      </motion.div>
-      </motion.div>
-    </section>
   );
 }
 
@@ -3422,7 +3338,7 @@ export default function Portfolio() {
       <SceneRail />
       <Navigation />
       <main>
-        <Hero />
+        <HomeHero firstProjectId={projects[0]?.id} />
         <ProfileOverview />
         <Agent2AgentFeature />
         {projects[0] && <ProjectScene project={projects[0]} position={0} />}
