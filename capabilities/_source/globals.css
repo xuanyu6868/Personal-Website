@@ -1727,7 +1727,8 @@ a:focus-visible { outline: 1px solid var(--accent); outline-offset: 5px; }
 .cockpit-nav__group h2 { margin-bottom: 16px; font-size: clamp(18px, 1.18vw, 22px); }
 .cockpit-nav__items { border-left-color: rgba(201,232,238,.26); }
 .cockpit-nav__item { min-height: clamp(40px, 4.8vh, 50px); color: rgba(237,248,251,.82); }
-.cockpit-nav__item::before { display: none; }
+.cockpit-nav__item::before { display: block; }
+.cockpit-nav__item.is-selected::before { height: 0; }
 .cockpit-nav__marker {
   position:absolute; top:0; left:0; width:2px; height:30px; z-index:2; pointer-events:none;
   background:linear-gradient(180deg,#b8f4ff,#46ceff); box-shadow:0 0 10px rgba(66,210,255,.8);
@@ -1736,6 +1737,7 @@ a:focus-visible { outline: 1px solid var(--accent); outline-offset: 5px; }
 .cockpit-nav__item.is-selected { background:linear-gradient(90deg,rgba(36,188,226,.18),rgba(28,140,177,.04) 62%,transparent 95%); }
 @media (hover:hover) {
   .cockpit-nav__item:hover { background:linear-gradient(90deg,rgba(44,186,219,.12),transparent 92%); }
+  .cockpit-nav__item:not(.is-selected):hover::before { height:60%; }
 }
 .cockpit-panel {
   background:linear-gradient(145deg,rgba(18,62,78,.69),rgba(5,30,40,.76) 65%,rgba(11,62,80,.7));
@@ -1744,6 +1746,7 @@ a:focus-visible { outline: 1px solid var(--accent); outline-offset: 5px; }
 }
 .cockpit-panel__frame { border-color:rgba(164,236,249,.15); }
 .cockpit-panel__top { color:rgba(223,246,251,.83); }
+.cockpit-panel__top i { animation:cockpit-beacon 5s ease-in-out infinite; }
 .cockpit-panel__content h2 { margin-top:32px; font-size:clamp(30px,2.25vw,40px); }
 .cockpit-panel__content p { color:rgba(232,249,253,.86); font-size:clamp(15.5px,1.05vw,18px); }
 .cockpit-panel__content li { min-height:38px; font-size:clamp(15.5px,1vw,18px); }
@@ -1761,6 +1764,7 @@ a:focus-visible { outline: 1px solid var(--accent); outline-offset: 5px; }
 }
 .cockpit-display__signal i { display:block; width:30%; height:100%; background:linear-gradient(90deg,transparent,#b0f4ff,transparent); animation:cockpit-signal .9s ease-out both; }
 @keyframes cockpit-signal { from { transform:translateX(-110%); opacity:0; } 20% { opacity:1; } to { transform:translateX(420%); opacity:0; } }
+@keyframes cockpit-beacon { 0%,100% { opacity:.6; } 50% { opacity:1; } }
 @media (max-width:1100px) {
   .cockpit-nav__marker { display:none; }
   .cockpit-nav__item::before { display:block; }
@@ -1769,5 +1773,6 @@ a:focus-visible { outline: 1px solid var(--accent); outline-offset: 5px; }
 }
 @media (prefers-reduced-motion:reduce) {
   .cockpit-nav__marker { transition:none; }
+  .cockpit-panel__top i { animation:none; }
   .cockpit-display__signal i { animation:none; opacity:0; }
 }
