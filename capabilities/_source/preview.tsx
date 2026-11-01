@@ -178,9 +178,14 @@ function Su7Showcase({
       d: createSu7FrameCache("d", SU7_D_COUNT),
       r: createSu7FrameCache("r", SU7_R_COUNT),
     };
-    for (const kind of drive ? ["d", "r"] : ["a", "t"]) {
-      void frameCaches[kind as Su7FrameKind].prefetchCompressed();
-    }
+    // 入场序列优先，避免转盘序列与首屏关键帧同时抢占下载连接。
+    const firstSequence: Su7FrameKind = drive ? "d" : "a";
+    const secondSequence: Su7FrameKind = drive ? "r" : "t";
+    let firstSequenceReady = false;
+    void frameCaches[firstSequence].prefetchCompressed().then(() => {
+      firstSequenceReady = true;
+      if (document.visibilityState === "visible") void frameCaches[secondSequence].prefetchCompressed();
+    });
 
     let raf = 0;
     let inView = false;
@@ -397,17 +402,28 @@ function Su7Showcase({
           parked = !!reducedMotion;
           frameCaches.d.setTarget(0, 1);
         }
-        raf = requestAnimationFrame(tick);
+        last = performance.now();
+        if (document.visibilityState === "visible") raf = requestAnimationFrame(tick);
       }
     }, { threshold: 0.3 });
+    const onVisibilityChange = () => {
+      cancelAnimationFrame(raf);
+      if (document.visibilityState === "visible" && inView) {
+        last = performance.now();
+        raf = requestAnimationFrame(tick);
+        if (firstSequenceReady) void frameCaches[secondSequence].prefetchCompressed();
+      }
+    };
+    document.addEventListener("visibilitychange", onVisibilityChange);
     currentCache.setTarget(targetFrame, 1, 1);
     publishDebug(true);
     preloadObserver.observe(canvas);
     io.observe(canvas);
-    raf = requestAnimationFrame(tick);
+    if (document.visibilityState === "visible") raf = requestAnimationFrame(tick);
 
     return () => {
       cancelAnimationFrame(raf);
+      document.removeEventListener("visibilitychange", onVisibilityChange);
       preloadObserver.disconnect();
       io.disconnect();
       for (const cache of Object.values(frameCaches)) cache.destroy();
@@ -1227,9 +1243,30 @@ function CapabilityCockpit({ selected, onSelect }: { selected: string; onSelect:
   const entries = cockpitSections.flatMap((section) => section.items);
   const active = entries.find((item) => item.id === selected) ?? entries[0];
   const group = cockpitSections.find((section) => section.items.some((item) => item.id === active.id))!;
+  const navRef = useRef<HTMLElement>(null);
+  const markerRef = useRef<HTMLSpanElement>(null);
+
+  useLayoutEffect(() => {
+    const nav = navRef.current;
+    const marker = markerRef.current;
+    if (!nav || !marker) return;
+    const place = () => {
+      const current = nav.querySelector<HTMLElement>(".cockpit-nav__item.is-selected");
+      if (!current) return;
+      const navBox = nav.getBoundingClientRect();
+      const itemBox = current.getBoundingClientRect();
+      marker.style.transform = `translateY(${itemBox.top - navBox.top + itemBox.height * .16}px)`;
+      marker.style.height = `${itemBox.height * .68}px`;
+    };
+    place();
+    const observer = new ResizeObserver(place);
+    observer.observe(nav);
+    return () => observer.disconnect();
+  }, [active.id]);
 
   return <>
-    <nav className="cockpit-nav" aria-label="技术栈与能力">
+    <nav className="cockpit-nav" aria-label="技术栈与能力" ref={navRef}>
+      <span className="cockpit-nav__marker" ref={markerRef} aria-hidden="true" />
       {cockpitSections.map((section) => <section className="cockpit-nav__group" key={section.label}>
         <h2>{section.label}</h2>
         <div className="cockpit-nav__items">
@@ -1244,6 +1281,8 @@ function CapabilityCockpit({ selected, onSelect }: { selected: string; onSelect:
 
     <div className="cockpit-display">
       <div className="cockpit-display__orbit cockpit-display__orbit--back" aria-hidden="true" />
+      <div className="cockpit-display__depth cockpit-display__depth--back" aria-hidden="true" />
+      <div className="cockpit-display__depth cockpit-display__depth--mid" aria-hidden="true" />
       <div className="cockpit-display__satellite cockpit-display__satellite--one" aria-hidden="true" />
       <div className="cockpit-display__satellite cockpit-display__satellite--two" aria-hidden="true" />
       <section className="cockpit-panel" aria-label="能力详情">
@@ -1258,6 +1297,7 @@ function CapabilityCockpit({ selected, onSelect }: { selected: string; onSelect:
         <div className="cockpit-panel__bottom" aria-hidden="true">{entries.map((item) => <span className={item.id === active.id ? "is-active" : undefined} key={item.id} />)}</div>
       </section>
       <div className="cockpit-display__orbit cockpit-display__orbit--front" aria-hidden="true" />
+      <div className="cockpit-display__signal" key={active.id} aria-hidden="true"><i /></div>
       <div className="cockpit-display__glow" aria-hidden="true" />
     </div>
   </>;
