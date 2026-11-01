@@ -1659,7 +1659,7 @@ a:focus-visible { outline: 1px solid var(--accent); outline-offset: 5px; }
 
 .cockpit-display {
   position: absolute; z-index: 3; right: 0; top: 50%; transform: translateY(-50%);
-  width: clamp(310px, 26vw, 440px); height: clamp(400px, 52vh, 520px);
+  width: clamp(270px, 22vw, 380px); height: clamp(400px, 52vh, 520px);
   display: grid; align-items: center; perspective: 1400px; pointer-events: none;
   animation: cockpit-enter-right 1s .25s both cubic-bezier(.22,1,.36,1);
 }
@@ -1699,15 +1699,12 @@ a:focus-visible { outline: 1px solid var(--accent); outline-offset: 5px; }
 @keyframes cockpit-enter-right { from { opacity:0; transform:translate(16px,-50%); } to { opacity:1; transform:translate(0,-50%); } }
 @keyframes cockpit-content-in { from { opacity:0; transform:translateY(9px); } to { opacity:1; transform:translateY(0); } }
 @keyframes cockpit-scan { 0% { opacity:0; transform:translateY(0); } 25% { opacity:.7; } 100% { opacity:0; transform:translateY(210px); } }
-@media (max-width: 1100px) and (min-width: 821px) {
-  .cockpit-nav { left: 1%; width: 185px; }
-  .cockpit-display { right: 1%; width: 300px; }
-  .cockpit-panel { padding:22px; }
-}
-@media (max-width: 820px) {
+@media (max-width: 1100px) {
   .capabilities--cat.section { padding-top:68px; padding-bottom:35px; }
+  .caps-cat { display:flex; flex-direction:column; min-height:0; padding-top:6vh; padding-bottom:4vh; }
   .caps-cat__pin { position:relative; height:auto; padding:0; display:flex; flex-direction:column; gap:25px; }
-  .caps-cat__stage { flex:none; height:38vh; min-height:230px; }
+  .caps-cat__stage { position:relative; inset:auto; width:100%; flex:none; height:38vh; min-height:230px; }
+  .caps-car__model .su7-showcase__canvas { height:min(36vh,360px); }
   .cockpit-nav { position:relative; inset:auto; transform:none; width:100%; animation:cockpit-content-in .6s both; }
   .cockpit-nav__group + .cockpit-nav__group { margin-top:20px; }
   .cockpit-nav__group h2 { font-size:17px; margin-bottom:10px; }
