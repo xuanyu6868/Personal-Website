@@ -1212,7 +1212,7 @@ function Capabilities() {
           />
         </div>
 
-        <CapabilityCockpit selected={selected} onSelect={setSelected} />
+        <CapabilityStory selected={selected} onSelect={setSelected} />
         </div>
       </div>
     </SceneSection>
@@ -1239,72 +1239,54 @@ const cockpitSections = [
   },
 ];
 
-function CapabilityCockpit({ selected, onSelect }: { selected: string; onSelect: (id: string) => void }) {
-  const entries = cockpitSections.flatMap((section) => section.items);
-  const active = entries.find((item) => item.id === selected) ?? entries[0];
-  const group = cockpitSections.find((section) => section.items.some((item) => item.id === active.id))!;
-  const navRef = useRef<HTMLElement>(null);
-  const markerRef = useRef<HTMLSpanElement>(null);
-
-  useLayoutEffect(() => {
-    const nav = navRef.current;
-    const marker = markerRef.current;
-    if (!nav || !marker) return;
-    const place = () => {
-      const current = nav.querySelector<HTMLElement>(".cockpit-nav__item.is-selected");
-      if (!current) return;
-      const navBox = nav.getBoundingClientRect();
-      const itemBox = current.getBoundingClientRect();
-      marker.style.transform = `translateY(${itemBox.top - navBox.top + itemBox.height * .16}px)`;
-      marker.style.height = `${itemBox.height * .68}px`;
-    };
-    place();
-    const observer = new ResizeObserver(place);
-    observer.observe(nav);
-    return () => observer.disconnect();
-  }, [active.id]);
+function CapabilityStory({ selected, onSelect }: { selected: string; onSelect: (id: string) => void }) {
+  const group = cockpitSections.find((section) => section.items.some((item) => item.id === selected)) ?? cockpitSections[0];
+  const active = group.items.find((item) => item.id === selected) ?? group.items[0];
+  const index = group.items.indexOf(active);
 
   return <>
-    <nav className="cockpit-nav" aria-label="技术栈与能力" ref={navRef}>
-      <div className="cockpit-nav__intro"><span>能力索引</span><i aria-hidden="true" /></div>
-      <span className="cockpit-nav__marker" ref={markerRef} aria-hidden="true" />
-      {cockpitSections.map((section) => <section className="cockpit-nav__group" key={section.label}>
-        <h2>{section.label}</h2>
-        <div className="cockpit-nav__items">
-          {section.items.map((item, index) => <button
-            className={`cockpit-nav__item${item.id === active.id ? " is-selected" : ""}`}
-            key={item.id} type="button" aria-pressed={item.id === active.id}
-            onClick={() => onSelect(item.id)}
-          ><span className="cockpit-nav__number" aria-hidden="true">{String(index + 1).padStart(2, "0")}</span><span className="cockpit-nav__label">{item.title}</span><span aria-hidden="true" className="cockpit-nav__arrow">↗</span></button>)}
-        </div>
-      </section>)}
+    <nav className="story-nav" aria-label="探索我的技术与能力">
+      <div className="story-nav__identity"><span className="story-nav__spark" aria-hidden="true" />全栈开发 · AI 应用</div>
+      <h2 className="story-nav__headline">让想法<br /><span>真正发生</span><i aria-hidden="true">.</i></h2>
+      <p className="story-nav__intro">从代码到产品，探索技术的实际价值。</p>
+      <div className="story-nav__section" aria-label="分类">
+        {cockpitSections.map((section) => <button type="button" key={section.label}
+          className={section.label === group.label ? "is-active" : ""}
+          aria-pressed={section.label === group.label}
+          onClick={() => { if (section.label !== group.label) onSelect(section.items[0].id); }}>{section.label}</button>)}
+      </div>
+      <div className="story-nav__choices" aria-label={`${group.label}方向`}>
+        {group.items.map((item, itemIndex) => <button type="button" key={item.id}
+          className={`story-nav__choice${item.id === active.id ? " is-active" : ""}`}
+          aria-pressed={item.id === active.id} onClick={() => onSelect(item.id)}>
+          <span className="story-nav__choice-index" aria-hidden="true">{String(itemIndex + 1).padStart(2, "0")}</span>
+          <span className="story-nav__choice-label">{item.title}</span>
+          <span className="story-nav__choice-arrow" aria-hidden="true">↗</span>
+        </button>)}
+      </div>
     </nav>
-
-    <div className="cockpit-display">
-      <div className="cockpit-display__orbit cockpit-display__orbit--back" aria-hidden="true" />
-      <div className="cockpit-display__depth cockpit-display__depth--back" aria-hidden="true" />
-      <div className="cockpit-display__depth cockpit-display__depth--mid" aria-hidden="true" />
-      <div className="cockpit-display__satellite cockpit-display__satellite--one" aria-hidden="true" />
-      <div className="cockpit-display__satellite cockpit-display__satellite--two" aria-hidden="true" />
-      <div className="cockpit-display__facet" aria-hidden="true" />
-      <section className="cockpit-panel" aria-label="能力详情">
-        <div className="cockpit-panel__frame" aria-hidden="true" />
-        <div className="cockpit-panel__top"><span><i /> {group.label}</span><span>{String(entries.indexOf(active) + 1).padStart(2, "0")} / 07</span></div>
-        <div className="cockpit-panel__content" key={active.id} aria-live="polite">
-          <h2>{active.title}</h2>
-          <p>{active.summary}</p>
-          <div className="cockpit-panel__divider" />
-          <ul>{active.details.map((detail, index) => <li key={detail.label} style={{ "--item-index": index } as React.CSSProperties}><i aria-hidden="true" /><span>{detail.label}</span></li>)}</ul>
-        </div>
-        <div className="cockpit-panel__bottom" aria-hidden="true">{entries.map((item) => <span className={item.id === active.id ? "is-active" : undefined} key={item.id} />)}</div>
-      </section>
-      <div className="cockpit-display__orbit cockpit-display__orbit--front" aria-hidden="true" />
-      <div className="cockpit-display__signal" key={active.id} aria-hidden="true"><i /></div>
-      <div className="cockpit-display__glow" aria-hidden="true" />
-    </div>
+    <section className="story-detail" aria-label="能力详情">
+      <div className="story-detail__atmosphere" aria-hidden="true">
+        <div className="story-detail__ring story-detail__ring--outer" />
+        <div className="story-detail__ring story-detail__ring--inner" />
+        <div className="story-detail__arc story-detail__arc--one" />
+        <div className="story-detail__arc story-detail__arc--two" />
+        <span className="story-detail__node story-detail__node--one" />
+        <span className="story-detail__node story-detail__node--two" />
+      </div>
+      <div className="story-detail__content" key={active.id} aria-live="polite">
+        <div className="story-detail__overline"><span>{group.label}</span><span>{String(index + 1).padStart(2, "0")} / {String(group.items.length).padStart(2, "0")}</span></div>
+        <h2>{active.title}<i aria-hidden="true">.</i></h2>
+        <p className="story-detail__summary">{active.summary}</p>
+        <div className="story-detail__rule" aria-hidden="true"><i /></div>
+        <p className="story-detail__list-label">{group.label === "技术栈" ? "相关技术" : "能力方向"}</p>
+        <ul>{active.details.map((detail, detailIndex) => <li key={detail.label} style={{ "--detail-index": detailIndex } as React.CSSProperties}>
+          <span className="story-detail__dash" aria-hidden="true" /><span>{detail.label}</span>
+        </li>)}</ul>
+      </div>
+    </section>
   </>;
 }
-
 
 function Preview() {return <div className="site">
 <div className="scroll-video scroll-video--ready" aria-hidden="true"><img className="scroll-video__media" src="./background.webp" /><div className="scroll-video__wash" /></div>
