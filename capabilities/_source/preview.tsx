@@ -1266,15 +1266,16 @@ function CapabilityCockpit({ selected, onSelect }: { selected: string; onSelect:
 
   return <>
     <nav className="cockpit-nav" aria-label="技术栈与能力" ref={navRef}>
+      <div className="cockpit-nav__intro"><span>能力索引</span><i aria-hidden="true" /></div>
       <span className="cockpit-nav__marker" ref={markerRef} aria-hidden="true" />
       {cockpitSections.map((section) => <section className="cockpit-nav__group" key={section.label}>
         <h2>{section.label}</h2>
         <div className="cockpit-nav__items">
-          {section.items.map((item) => <button
+          {section.items.map((item, index) => <button
             className={`cockpit-nav__item${item.id === active.id ? " is-selected" : ""}`}
             key={item.id} type="button" aria-pressed={item.id === active.id}
             onClick={() => onSelect(item.id)}
-          ><span>{item.title}</span><span aria-hidden="true" className="cockpit-nav__arrow">↗</span></button>)}
+          ><span className="cockpit-nav__number" aria-hidden="true">{String(index + 1).padStart(2, "0")}</span><span className="cockpit-nav__label">{item.title}</span><span aria-hidden="true" className="cockpit-nav__arrow">↗</span></button>)}
         </div>
       </section>)}
     </nav>
@@ -1285,6 +1286,7 @@ function CapabilityCockpit({ selected, onSelect }: { selected: string; onSelect:
       <div className="cockpit-display__depth cockpit-display__depth--mid" aria-hidden="true" />
       <div className="cockpit-display__satellite cockpit-display__satellite--one" aria-hidden="true" />
       <div className="cockpit-display__satellite cockpit-display__satellite--two" aria-hidden="true" />
+      <div className="cockpit-display__facet" aria-hidden="true" />
       <section className="cockpit-panel" aria-label="能力详情">
         <div className="cockpit-panel__frame" aria-hidden="true" />
         <div className="cockpit-panel__top"><span><i /> {group.label}</span><span>{String(entries.indexOf(active) + 1).padStart(2, "0")} / 07</span></div>
@@ -1292,7 +1294,7 @@ function CapabilityCockpit({ selected, onSelect }: { selected: string; onSelect:
           <h2>{active.title}</h2>
           <p>{active.summary}</p>
           <div className="cockpit-panel__divider" />
-          <ul>{active.details.map((detail, index) => <li key={detail.label} style={{ "--item-index": index } as React.CSSProperties}><i aria-hidden="true" />{detail.label}</li>)}</ul>
+          <ul>{active.details.map((detail, index) => <li key={detail.label} style={{ "--item-index": index } as React.CSSProperties}><i aria-hidden="true" /><span>{detail.label}</span></li>)}</ul>
         </div>
         <div className="cockpit-panel__bottom" aria-hidden="true">{entries.map((item) => <span className={item.id === active.id ? "is-active" : undefined} key={item.id} />)}</div>
       </section>
