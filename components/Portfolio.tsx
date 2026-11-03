@@ -13,6 +13,7 @@ import { renderMarkdown } from "../lib/simple-markdown";
 import { projects, type Project, type ProjectVisual as VisualType } from "../data/projects";
 import NoteSyncGallery from "./NoteSyncGallery";
 import HomeHero from "./HomeHero";
+import CapabilityStory from "./CapabilityStory";
 import VoiceProject from "./VoiceProject";
 import WeiClawBook from "./weiclaw-preview/WeiClawBook";
 import SparkCommerceBelt from "./SparkCommerceBelt";
@@ -2941,11 +2942,7 @@ function Capabilities() {
           />
         </div>
 
-        <Reveal className="caps-menu-wrap" delay={0.1}>
-          <CapsBranchMenu />
-        </Reveal>
-
-        <HoloScene className="caps-holo" />
+        <CapabilityStory />
         </div>
       </div>
     </SceneSection>
