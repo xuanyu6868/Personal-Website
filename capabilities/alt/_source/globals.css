@@ -1995,3 +1995,29 @@ a:focus-visible { outline: 1px solid var(--accent); outline-offset: 5px; }
   .folio-nav,.folio-detail,.folio-detail__content,.folio-detail__content li { animation:none !important; }
   .folio-nav__item,.folio-nav__item-arrow,.folio-nav__groups button,.folio-nav__groups button::after { transition:none !important; }
 }
+
+/* 简洁版细化：更清晰的选择反馈与阅读节奏 */
+.folio-nav__groups button { padding-bottom:14px; color:rgba(230,245,248,.74); }
+.folio-nav__groups button.is-active { color:#fff; font-weight:600; }
+.folio-nav__items { margin-top:10px; }
+.folio-nav__item { isolation:isolate; min-height:clamp(46px,5.1vh,54px); padding:9px 10px 9px 0; animation:folio-row-appear .34s both; animation-delay:calc(var(--item-index) * 40ms); }
+.folio-nav__item::before { content:""; position:absolute; z-index:-1; inset:0; background:linear-gradient(90deg,rgba(42,185,220,.17),rgba(24,124,150,.035) 72%,transparent); opacity:0; transition:opacity .28s ease; }
+.folio-nav__item.is-active::before { opacity:1; }
+.folio-nav__item.is-active .folio-nav__item-name { font-weight:600; }
+.folio-nav__item.is-active::after { width:64px; transition:width .3s ease; }
+@media (hover:hover) { .folio-nav__item:hover::before { opacity:1; } .folio-nav__item.is-active:hover::after { width:92px; } }
+.folio-detail__header { color:rgba(234,249,252,.9); }
+.folio-detail__summary { color:rgba(242,251,253,.92); }
+.folio-detail__rule { margin:26px 0 22px; }
+.folio-detail__label { color:rgba(230,246,249,.84); }
+.folio-detail__content li { min-height:42px; font-size:clamp(16px,1.05vw,18px); }
+@keyframes folio-row-appear { from { opacity:0; } to { opacity:1; } }
+@media (max-width:1100px) {
+  .folio-nav__items { row-gap:4px; }
+  .folio-nav__item { min-height:46px; }
+  .folio-detail__content li { min-height:44px; }
+}
+@media (prefers-reduced-motion:reduce) {
+  .folio-nav__item { animation:none !important; }
+  .folio-nav__item::before,.folio-nav__item::after { transition:none !important; }
+}

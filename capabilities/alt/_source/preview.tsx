@@ -1245,6 +1245,15 @@ function CapabilityStory({ selected, onSelect }: { selected: string; onSelect: (
   const selection = useRef<Record<string, string>>({ "技术栈": "frontend", "我的能力": "product" });
   const choose = (id: string) => { selection.current[group.label] = id; onSelect(id); };
   const index = group.items.indexOf(active);
+  const navigateItems = (event: React.KeyboardEvent<HTMLDivElement>) => {
+    if (!["ArrowDown", "ArrowUp", "Home", "End"].includes(event.key)) return;
+    const current = group.items.findIndex((item) => item.id === selected);
+    const next = event.key === "Home" ? 0 : event.key === "End" ? group.items.length - 1
+      : (current + (event.key === "ArrowDown" ? 1 : -1) + group.items.length) % group.items.length;
+    event.preventDefault();
+    choose(group.items[next].id);
+    event.currentTarget.querySelectorAll<HTMLButtonElement>("button")[next]?.focus();
+  };
   return <>
     <nav className="folio-nav" aria-label="探索我的技术与能力">
       <div className="folio-nav__heading"><span className="folio-nav__marker" aria-hidden="true" /><p>技术与实践</p></div>
@@ -1255,9 +1264,10 @@ function CapabilityStory({ selected, onSelect }: { selected: string; onSelect: (
           onClick={() => { if (section.label !== group.label) onSelect(selection.current[section.label] ?? section.items[0].id); }}>
           {section.label === "我的能力" ? "实践能力" : section.label}</button>)}
       </div>
-      <div className="folio-nav__items" aria-label={`${group.label}方向`}>
+      <div className="folio-nav__items" aria-label={`${group.label}方向`} onKeyDown={navigateItems} key={group.label}>
         {group.items.map((item, i) => <button className={`folio-nav__item${item.id === active.id ? " is-active" : ""}`}
-          key={item.id} type="button" aria-pressed={item.id === active.id} onClick={() => choose(item.id)}>
+          key={item.id} type="button" aria-pressed={item.id === active.id} onClick={() => choose(item.id)}
+          style={{ "--item-index": i } as React.CSSProperties}>
           <span className="folio-nav__item-number" aria-hidden="true">{String(i + 1).padStart(2, "0")}</span>
           <span className="folio-nav__item-name">{item.title}</span><span className="folio-nav__item-arrow" aria-hidden="true">↗</span>
         </button>)}
