@@ -1242,30 +1242,33 @@ const cockpitSections = [
 function CapabilityStory({ selected, onSelect }: { selected: string; onSelect: (id: string) => void }) {
   const group = cockpitSections.find((section) => section.items.some((item) => item.id === selected)) ?? cockpitSections[0];
   const active = group.items.find((item) => item.id === selected) ?? group.items[0];
-  const index = group.items.indexOf(active);
+  const lastSelection = useRef<Record<string, string>>({ "技术栈": "frontend", "我的能力": "product" });
+  const selectItem = (id: string) => {
+    lastSelection.current[group.label] = id;
+    onSelect(id);
+  };
 
   return <>
     <nav className="story-nav" aria-label="探索我的技术与能力">
-      <div className="story-nav__identity"><span className="story-nav__spark" aria-hidden="true" />全栈开发 · AI 应用</div>
-      <h2 className="story-nav__headline">让想法<br /><span>真正发生</span><i aria-hidden="true">.</i></h2>
-      <p className="story-nav__intro">从代码到产品，探索技术的实际价值。</p>
+      <div className="story-nav__identity"><span className="story-nav__spark" aria-hidden="true" />我的工作方向</div>
+      <h2 className="story-nav__headline">技术探索<br /><span>产品实践</span><i aria-hidden="true">.</i></h2>
+      <p className="story-nav__intro">全栈开发 · AI 应用 · 自动化</p>
       <div className="story-nav__section" aria-label="分类">
         {cockpitSections.map((section) => <button type="button" key={section.label}
           className={section.label === group.label ? "is-active" : ""}
           aria-pressed={section.label === group.label}
-          onClick={() => { if (section.label !== group.label) onSelect(section.items[0].id); }}>{section.label}</button>)}
+          onClick={() => { if (section.label !== group.label) onSelect(lastSelection.current[section.label] ?? section.items[0].id); }}>{section.label}</button>)}
       </div>
       <div className="story-nav__choices" aria-label={`${group.label}方向`}>
-        {group.items.map((item, itemIndex) => <button type="button" key={item.id}
+        {group.items.map((item) => <button type="button" key={item.id}
           className={`story-nav__choice${item.id === active.id ? " is-active" : ""}`}
-          aria-pressed={item.id === active.id} onClick={() => onSelect(item.id)}>
-          <span className="story-nav__choice-index" aria-hidden="true">{String(itemIndex + 1).padStart(2, "0")}</span>
+          aria-pressed={item.id === active.id} onClick={() => selectItem(item.id)}>
           <span className="story-nav__choice-label">{item.title}</span>
           <span className="story-nav__choice-arrow" aria-hidden="true">↗</span>
         </button>)}
       </div>
     </nav>
-    <section className="story-detail" aria-label="能力详情">
+    <section className="story-detail" aria-label="能力详情" aria-live="polite">
       <div className="story-detail__atmosphere" aria-hidden="true">
         <div className="story-detail__ring story-detail__ring--outer" />
         <div className="story-detail__ring story-detail__ring--inner" />
@@ -1274,8 +1277,8 @@ function CapabilityStory({ selected, onSelect }: { selected: string; onSelect: (
         <span className="story-detail__node story-detail__node--one" />
         <span className="story-detail__node story-detail__node--two" />
       </div>
-      <div className="story-detail__content" key={active.id} aria-live="polite">
-        <div className="story-detail__overline"><span>{group.label}</span><span>{String(index + 1).padStart(2, "0")} / {String(group.items.length).padStart(2, "0")}</span></div>
+      <div className="story-detail__content" key={active.id}>
+        <div className="story-detail__overline"><span>{group.label}</span></div>
         <h2>{active.title}<i aria-hidden="true">.</i></h2>
         <p className="story-detail__summary">{active.summary}</p>
         <div className="story-detail__rule" aria-hidden="true"><i /></div>

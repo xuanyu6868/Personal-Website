@@ -1900,3 +1900,37 @@ a:focus-visible { outline: 1px solid var(--accent); outline-offset: 5px; }
   .story-nav,.story-detail,.story-detail__content,.story-detail__content li,.story-detail__node { animation:none !important; }
   .story-nav__choice,.story-nav__choice-arrow,.story-nav__section button,.story-nav__section button::after { transition:none !important; }
 }
+
+/* 能力页细化：提高内容层级及交互识别度 */
+.story-nav__headline { margin-top:clamp(19px,2.7vh,28px); font-size:clamp(41px,3.5vw,62px); line-height:1.16; letter-spacing:.035em; }
+.story-nav__headline span { color:#e5f8fd; }
+.story-nav__intro { color:rgba(238,249,251,.86); letter-spacing:.035em; }
+.story-nav__section { margin-top:clamp(29px,4vh,40px); }
+.story-nav__section button { font-size:16px; }
+.story-nav__choices { display:grid; gap:2px; margin-top:10px; }
+.story-nav__choice { position:relative; padding:7px 8px 7px 12px; min-height:clamp(41px,4.5vh,49px); border-left:2px solid transparent; }
+.story-nav__choice.is-active { border-left-color:#58d5ff; background:linear-gradient(90deg,rgba(38,176,217,.18),rgba(6,35,43,.06) 72%,transparent); }
+.story-nav__choice-label { font-weight:450; }
+.story-detail__content { padding-inline:9%; }
+.story-detail__overline { color:rgba(219,245,251,.84); }
+.story-detail__overline span:last-child { color:inherit; font:inherit; letter-spacing:inherit; }
+.story-detail__content h2 { margin-top:clamp(20px,3vh,30px); font-weight:700; }
+.story-detail__summary { color:rgba(240,250,252,.92); }
+.story-detail__list-label { color:rgba(220,242,247,.8); font-size:14px; }
+.story-detail__content li { min-height:40px; }
+.story-detail__ring--outer { right:-5%; top:11%; width:82%; border-color:rgba(130,225,245,.2); }
+.story-detail__ring--inner { right:2%; top:17%; width:68%; border-color:rgba(139,227,246,.1); }
+.story-detail__arc--one { right:-11%; width:86%; top:39%; opacity:.65; }
+.story-detail__arc--two { right:-7%; width:80%; top:41%; opacity:.5; }
+@media (max-width:1100px) {
+  .story-nav__headline { font-size:clamp(38px,8vw,54px); }
+  .story-nav__choices { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); column-gap:14px; }
+  .story-detail__content { padding-inline:6%; }
+}
+
+/* 第二轮：避开车模活动范围，保持详情文本完整 */
+@media (min-width:1101px) {
+  .story-detail { width:clamp(260px,20vw,360px); }
+  .story-detail__content { padding-inline:8% 5%; }
+  .story-detail__atmosphere { inset:-3% -4%; }
+}
