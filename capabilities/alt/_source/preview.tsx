@@ -1243,8 +1243,37 @@ function CapabilityStory({ selected, onSelect }: { selected: string; onSelect: (
   const group = cockpitSections.find((section) => section.items.some((item) => item.id === selected)) ?? cockpitSections[0];
   const active = group.items.find((item) => item.id === selected) ?? group.items[0];
   const selection = useRef<Record<string, string>>({ "技术栈": "frontend", "我的能力": "product" });
+  const listRef = useRef<HTMLDivElement>(null);
+  const indicatorRef = useRef<HTMLSpanElement>(null);
+  const ambientRef = useRef<HTMLDivElement>(null);
   const choose = (id: string) => { selection.current[group.label] = id; onSelect(id); };
   const index = group.items.indexOf(active);
+  useLayoutEffect(() => {
+    const list = listRef.current;
+    const indicator = indicatorRef.current;
+    if (!list || !indicator) return;
+    const place = () => {
+      const current = list.querySelector<HTMLButtonElement>("button.is-active");
+      if (!current) return;
+      indicator.style.transform = `translate3d(${current.offsetLeft}px, ${current.offsetTop + current.offsetHeight - 2}px, 0)`;
+      indicator.style.width = `${Math.min(72, current.offsetWidth * .38)}px`;
+      indicator.style.opacity = "1";
+    };
+    place();
+    const observer = new ResizeObserver(place);
+    observer.observe(list);
+    return () => observer.disconnect();
+  }, [active.id, group.label]);
+  const moveDetailLight = (event: React.PointerEvent<HTMLElement>) => {
+    if (event.pointerType !== "mouse") return;
+    const bounds = ambientRef.current?.getBoundingClientRect() ?? event.currentTarget.getBoundingClientRect();
+    event.currentTarget.style.setProperty("--detail-pointer-x", `${((event.clientX - bounds.left) / bounds.width) * 100}%`);
+    event.currentTarget.style.setProperty("--detail-pointer-y", `${((event.clientY - bounds.top) / bounds.height) * 100}%`);
+    event.currentTarget.dataset.pointerActive = "true";
+  };
+  const clearDetailLight = (event: React.PointerEvent<HTMLElement>) => {
+    delete event.currentTarget.dataset.pointerActive;
+  };
   const navigateItems = (event: React.KeyboardEvent<HTMLDivElement>) => {
     if (!["ArrowDown", "ArrowUp", "Home", "End"].includes(event.key)) return;
     const current = group.items.findIndex((item) => item.id === selected);
@@ -1264,7 +1293,8 @@ function CapabilityStory({ selected, onSelect }: { selected: string; onSelect: (
           onClick={() => { if (section.label !== group.label) onSelect(selection.current[section.label] ?? section.items[0].id); }}>
           {section.label === "我的能力" ? "实践能力" : section.label}</button>)}
       </div>
-      <div className="folio-nav__items" aria-label={`${group.label}方向`} onKeyDown={navigateItems} key={group.label}>
+      <div className="folio-nav__items" aria-label={`${group.label}方向`} onKeyDown={navigateItems} key={group.label} ref={listRef}>
+        <span className="folio-nav__selection" ref={indicatorRef} aria-hidden="true" />
         {group.items.map((item, i) => <button className={`folio-nav__item${item.id === active.id ? " is-active" : ""}`}
           key={item.id} type="button" aria-pressed={item.id === active.id} onClick={() => choose(item.id)}
           style={{ "--item-index": i } as React.CSSProperties}>
@@ -1273,8 +1303,8 @@ function CapabilityStory({ selected, onSelect }: { selected: string; onSelect: (
         </button>)}
       </div>
     </nav>
-    <section className="folio-detail" aria-label="能力详情" aria-live="polite">
-      <div className="folio-detail__ambient" aria-hidden="true" />
+    <section className="folio-detail" aria-label="能力详情" aria-live="polite" onPointerMove={moveDetailLight} onPointerLeave={clearDetailLight}>
+      <div className="folio-detail__ambient" ref={ambientRef} aria-hidden="true" />
       <div className="folio-detail__content" key={active.id}>
         <div className="folio-detail__header"><span>{group.label === "我的能力" ? "实践能力" : group.label}</span><span>{String(index + 1).padStart(2,"0")} <i>/</i> {String(group.items.length).padStart(2,"0")}</span></div>
         <div className="folio-detail__heading"><h2>{active.title}</h2></div>
