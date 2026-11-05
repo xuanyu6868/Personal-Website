@@ -127,23 +127,12 @@ function AmbientBackground() {
 }
 function Contact() {
   const [copyStatus, setCopyStatus] = useState<"idle" | "copied" | "failed">("idle");
-  const [terminalPlaying, setTerminalPlaying] = useState(false);
-  const [terminalReplay, setTerminalReplay] = useState(0);
   const [catOpen, setCatOpen] = useState(false);
   const resetTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const terminalTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => () => {
     if (resetTimer.current) clearTimeout(resetTimer.current);
-    if (terminalTimer.current) clearTimeout(terminalTimer.current);
   }, []);
-
-  const playTerminal = () => {
-    setTerminalReplay((value) => value + 1);
-    setTerminalPlaying(true);
-    if (terminalTimer.current) clearTimeout(terminalTimer.current);
-    terminalTimer.current = setTimeout(() => setTerminalPlaying(false), 2000);
-  };
 
   const copyEmail = async () => {
     try {
@@ -179,12 +168,8 @@ function Contact() {
             <div className="contact-close__status" aria-live="polite" role="status">
               {copyStatus === "copied" ? "邮箱已复制" : copyStatus === "failed" ? "复制失败，请手动选择邮箱地址" : ""}
             </div>
-            <a className="contact-close__github" href="https://github.com/xuanyu6868" target="_blank" rel="noreferrer">GitHub <span aria-hidden="true">↗</span></a>
+            <a className="contact-close__github" href="https://github.com/xuanyu6868" target="_blank" rel="noreferrer"><svg className="contact-close__github-mark" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path fill="currentColor" d="M12 .297a12 12 0 0 0-3.794 23.386c.6.11.82-.26.82-.577v-2.233c-3.338.726-4.042-1.61-4.042-1.61-.546-1.387-1.333-1.756-1.333-1.756-1.09-.744.082-.729.082-.729 1.205.085 1.84 1.237 1.84 1.237 1.07 1.834 2.807 1.304 3.492.997.108-.776.418-1.305.762-1.605-2.665-.304-5.466-1.333-5.466-5.931 0-1.31.469-2.381 1.236-3.221-.124-.304-.535-1.524.117-3.176 0 0 1.008-.322 3.3 1.23a11.51 11.51 0 0 1 3.003-.404c1.018.005 2.045.137 3.003.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.652.242 2.872.119 3.176.77.84 1.235 1.911 1.235 3.221 0 4.61-2.805 5.624-5.475 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.216.694.825.576A12 12 0 0 0 12 .297Z"/></svg>GitHub <span aria-hidden="true">↗</span></a>
           </Reveal>
-          <button className="contact-terminal" type="button" data-playing={terminalPlaying} aria-label="播放开发者终端文字动画" onClick={playTerminal}>
-            <span className="contact-terminal__top" aria-hidden="true"><i/><span>hello.sh</span><b>›_</b></span>
-            <span className="contact-terminal__screen" key={terminalReplay} aria-hidden="true"><span className="contact-terminal__line"><b>&gt;</b> hello</span><span className="contact-terminal__line"><b>&gt;</b> 可以一起聊聊<span className="contact-terminal__caret"/></span></span>
-          </button>
         </div>
 
         <footer className="contact-close__footer">
