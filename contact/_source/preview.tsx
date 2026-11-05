@@ -144,10 +144,23 @@ function Contact() {
     resetTimer.current = setTimeout(() => setCopyStatus("idle"), 3000);
   };
 
+  const trackPointer = (event: React.PointerEvent<HTMLDivElement>) => {
+    if (event.pointerType !== "mouse" || window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+    const bounds = event.currentTarget.getBoundingClientRect();
+    event.currentTarget.style.setProperty("--contact-x", `${event.clientX - bounds.left}px`);
+    event.currentTarget.style.setProperty("--contact-y", `${event.clientY - bounds.top}px`);
+    event.currentTarget.dataset.tracking = "true";
+  };
+
+  const clearPointer = (event: React.PointerEvent<HTMLDivElement>) => {
+    delete event.currentTarget.dataset.tracking;
+  };
+
   return (
     <SceneSection className="contact contact--cat" id="contact" index={SCENE_CONTACT_INDEX} label="联系" scene="contact">
       <div className="contact-close">
-        <div className="contact-close__main">
+        <div className="contact-close__main" onPointerMove={trackPointer} onPointerLeave={clearPointer}>
+          <div className="contact-close__pointer-light" aria-hidden="true" />
           <Reveal className="contact-close__title">
             <h2>聊聊吧<span className="contact-close__dot">.</span></h2>
           </Reveal>
@@ -159,7 +172,7 @@ function Contact() {
               <a className="contact-close__email" href="mailto:2284664203@qq.com">
                 <span>2284664203@qq.com</span><i aria-hidden="true">↗</i>
               </a>
-              <button className="contact-close__copy" type="button" onClick={copyEmail} aria-label="复制邮箱地址">
+              <button className="contact-close__copy" type="button" onClick={copyEmail} aria-label="复制邮箱地址" data-state={copyStatus}>
                 复制
               </button>
             </div>
@@ -167,6 +180,7 @@ function Contact() {
               {copyStatus === "copied" ? "邮箱已复制" : copyStatus === "failed" ? "复制失败，请手动选择邮箱地址" : ""}
             </div>
             <a className="contact-close__github" href="https://github.com/xuanyu6868" target="_blank" rel="noreferrer">GitHub <span aria-hidden="true">↗</span></a>
+            <div className="contact-close__signal" aria-hidden="true"><i /><b /><i /></div>
           </Reveal>
         </div>
 

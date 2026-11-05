@@ -10,6 +10,8 @@
   color: #f6f8f6;
 }
 .contact-close__main {
+  position: relative;
+  isolation: isolate;
   width: min(100%, 880px);
   text-align: center;
   text-shadow: 0 2px 18px rgba(0, 0, 0, .5);
@@ -69,6 +71,8 @@
 .contact-close__email::after { background: #55cafa; transform: scaleX(0); transform-origin: left; transition: transform .4s cubic-bezier(.22, 1, .36, 1); }
 .contact-close__email i { display: inline-block; color: #43c6fb; font-size: .75em; font-style: normal; transition: transform .35s ease; }
 .contact-close__copy {
+  position: relative;
+  overflow: hidden;
   border: 1px solid rgba(235, 249, 251, .42);
   border-radius: 0;
   padding: 9px 15px;
@@ -103,6 +107,38 @@
 .contact-close__footer > :nth-child(2), .contact-close__footer > :nth-child(3) { text-align: center; }
 .contact-close__back { white-space: nowrap; color: rgba(246, 251, 251, .9); text-decoration: none; }
 .contact-close__back span { margin-left: 7px; }
+.contact-close__pointer-light {
+  position: absolute;
+  z-index: 2;
+  top: 0;
+  left: 0;
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  opacity: 0;
+  pointer-events: none;
+  background: #8ae1ff;
+  box-shadow: 0 0 10px rgba(77, 203, 255, .85);
+  transform: translate3d(calc(var(--contact-x, 0px) + 18px), calc(var(--contact-y, 0px) + 18px), 0);
+  transition: opacity .3s ease, transform .16s ease-out;
+}
+.contact-close__pointer-light::before, .contact-close__pointer-light::after {
+  content: "";
+  position: absolute;
+  border-radius: 50%;
+  background: #95e4ff;
+}
+.contact-close__pointer-light::before { width: 2px; height: 2px; left: -8px; top: 6px; opacity: .7; }
+.contact-close__pointer-light::after { width: 2px; height: 2px; left: 9px; top: -7px; opacity: .5; }
+.contact-close__main[data-tracking="true"] .contact-close__pointer-light { opacity: .8; }
+.contact-close__signal { display: flex; align-items: center; justify-content: center; gap: 9px; margin: 14px auto 0; width: 110px; height: 16px; pointer-events: none; }
+.contact-close__signal i { display: block; width: 39px; height: 1px; background: linear-gradient(90deg, transparent, rgba(113, 218, 250, .55)); transform-origin: right; transition: transform .5s ease, opacity .5s ease; opacity: .6; }
+.contact-close__signal i:last-child { background: linear-gradient(90deg, rgba(113, 218, 250, .55), transparent); transform-origin: left; }
+.contact-close__signal b { width: 5px; height: 5px; border-radius: 50%; background: #81defd; box-shadow: 0 0 0 0 rgba(86, 206, 255, .35); animation: contact-signal 3.5s ease-out infinite; }
+.contact-close__copy[data-state="copied"] { color: #c2f1ff; border-color: #77d8fb; }
+.contact-close__copy[data-state="copied"]::after { content: ""; position: absolute; inset: 0; border: 1px solid rgba(145, 231, 255, .8); animation: contact-copy-flash .6s ease-out both; pointer-events: none; }
+@keyframes contact-signal { 0%, 100% { box-shadow: 0 0 0 0 rgba(86, 206, 255, 0); } 35% { box-shadow: 0 0 0 7px rgba(86, 206, 255, .16); } 70% { box-shadow: 0 0 0 12px rgba(86, 206, 255, 0); } }
+@keyframes contact-copy-flash { from { opacity: 1; transform: scale(.9); } to { opacity: 0; transform: scale(1.2); } }
 .contact-close a:focus-visible, .contact-close button:focus-visible { outline: 2px solid #89dcff; outline-offset: 5px; }
 @media (hover: hover) and (pointer: fine) {
   .contact-close__title h2:hover { transform: scale(1.025); }
@@ -111,8 +147,12 @@
   .contact-close__email:hover i, .contact-close__github:hover span { transform: translate(4px, -4px); }
   .contact-close__copy:hover { border-color: #69d5ff; color: #fff; background: rgba(71, 193, 235, .13); }
   .contact-close__github:hover { color: #fff; }
+  .contact-close__github:hover + .contact-close__signal i { opacity: 1; transform: scaleX(1.2); }
+  .contact-close__footer > span { transition: color .3s ease, transform .3s ease; }
+  .contact-close__footer > span:hover { color: #fff; transform: translateY(-3px); }
   .contact-close__back:hover span { transform: translateY(-4px); }
 }
+.contact-close__actions:focus-within .contact-close__signal i { opacity: 1; }
 @media (max-width: 820px) {
   .contact-close { padding: 125px 24px 180px; }
   .contact-close__title h2 { font-size: clamp(68px, 13vw, 108px); }
@@ -131,5 +171,7 @@
 }
 @media (prefers-reduced-motion: reduce) {
   .contact-close *, .contact-close *::before, .contact-close *::after { transition-duration: 0s !important; animation-duration: 0s !important; scroll-behavior: auto; }
+  .contact-close__pointer-light { display: none; }
+  .contact-close__signal b, .contact-close__copy[data-state="copied"]::after { animation: none !important; }
   .contact-close__title h2:hover, .contact-close__title h2:hover .contact-close__dot { transform: none; }
 }
