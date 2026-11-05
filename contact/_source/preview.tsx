@@ -2,6 +2,7 @@ import React, {useEffect, useRef, useState} from "react";
 import {createRoot} from "react-dom/client";
 import {useReducedMotion} from "framer-motion";
 import "./globals.css";
+import "./contact.css";
 const SCENE_CONTACT_INDEX = "08";
 type SceneName = "profile" | "work" | "capabilities" | "contact";
 function SceneSection({
@@ -125,31 +126,55 @@ function AmbientBackground() {
   );
 }
 function Contact() {
+  const [copyStatus, setCopyStatus] = useState<"idle" | "copied" | "failed">("idle");
+  const resetTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => () => {
+    if (resetTimer.current) clearTimeout(resetTimer.current);
+  }, []);
+
+  const copyEmail = async () => {
+    try {
+      await navigator.clipboard.writeText("2284664203@qq.com");
+      setCopyStatus("copied");
+    } catch {
+      setCopyStatus("failed");
+    }
+    if (resetTimer.current) clearTimeout(resetTimer.current);
+    resetTimer.current = setTimeout(() => setCopyStatus("idle"), 3000);
+  };
+
   return (
     <SceneSection className="contact contact--cat" id="contact" index={SCENE_CONTACT_INDEX} label="联系" scene="contact">
-      <div className="contact-cat">
-        <Reveal className="contact-cat__status-wrap">
-          <span className="contact-cat__status"><i />正在接：全职 / 项目合作 / 技术交流</span>
-        </Reveal>
+      <div className="contact-close">
+        <div className="contact-close__main">
+          <Reveal className="contact-close__title">
+            <h2>聊聊吧<span className="contact-close__dot">.</span></h2>
+          </Reveal>
+          <Reveal className="contact-close__intro" delay={0.12}>
+            <p>工作机会 <span>·</span> 项目合作 <span>·</span> 技术交流</p>
+          </Reveal>
+          <Reveal className="contact-close__actions" delay={0.24}>
+            <div className="contact-close__email-row">
+              <a className="contact-close__email" href="mailto:2284664203@qq.com">
+                <span>2284664203@qq.com</span><i aria-hidden="true">↗</i>
+              </a>
+              <button className="contact-close__copy" type="button" onClick={copyEmail} aria-label="复制邮箱地址">
+                复制
+              </button>
+            </div>
+            <div className="contact-close__status" aria-live="polite" role="status">
+              {copyStatus === "copied" ? "邮箱已复制" : copyStatus === "failed" ? "复制失败，请手动选择邮箱地址" : ""}
+            </div>
+            <a className="contact-close__github" href="https://github.com/xuanyu6868" target="_blank" rel="noreferrer">GitHub <span aria-hidden="true">↗</span></a>
+          </Reveal>
+        </div>
 
-        <Reveal className="contact-cat__title" delay={0.06}>
-          <h2 aria-hidden="true">聊聊吧</h2>
-        </Reveal>
-
-        <Reveal className="contact-cat__cta" delay={0.12}>
-          <a className="contact-cat__email" href="mailto:2284664203@qq.com">
-            2284664203@qq.com <i>↗</i>
-          </a>
-          <div className="contact-cat__links">
-            <a href="https://github.com/xuanyu6868" target="_blank" rel="noreferrer">GitHub ↗</a>
-            <a href="#top">回到顶部 ↑</a>
-          </div>
-        </Reveal>
-
-        <footer className="contact-cat__footer">
+        <footer className="contact-close__footer">
           <span>禤宇 © 2026</span>
           <span>AI Native 全栈工程师</span>
           <span>设计 + 代码：禤宇 · 监工：猫</span>
+          <a href="#top" className="contact-close__back">回到顶部 <span aria-hidden="true">↑</span></a>
         </footer>
       </div>
     </SceneSection>
