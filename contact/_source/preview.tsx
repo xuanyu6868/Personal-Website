@@ -127,6 +127,8 @@ function AmbientBackground() {
 }
 function Contact() {
   const [copyStatus, setCopyStatus] = useState<"idle" | "copied" | "failed">("idle");
+  const [terminalOpen, setTerminalOpen] = useState(false);
+  const [catOpen, setCatOpen] = useState(false);
   const resetTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => () => {
@@ -149,7 +151,7 @@ function Contact() {
       <div className="contact-close">
         <div className="contact-close__main">
           <Reveal className="contact-close__title">
-            <h2>聊聊吧<span className="contact-close__dot">.</span></h2>
+            <h2 aria-label="聊聊吧。"><span className="contact-close__char" aria-hidden="true" style={{"--char-index": 0} as React.CSSProperties}>聊</span><span className="contact-close__char" aria-hidden="true" style={{"--char-index": 1} as React.CSSProperties}>聊</span><span className="contact-close__char" aria-hidden="true" style={{"--char-index": 2} as React.CSSProperties}>吧</span><span className="contact-close__dot" aria-hidden="true">.</span></h2>
           </Reveal>
           <Reveal className="contact-close__intro" delay={0.12}>
             <p>工作机会 <span>·</span> 项目合作 <span>·</span> 技术交流</p>
@@ -157,10 +159,11 @@ function Contact() {
           <Reveal className="contact-close__actions" delay={0.24}>
             <div className="contact-close__email-row">
               <a className="contact-close__email" href="mailto:2284664203@qq.com">
+                <span className="contact-close__envelope" aria-hidden="true"><span className="contact-close__letter"/><span className="contact-close__envelope-body"/><span className="contact-close__flap"/></span>
                 <span>2284664203@qq.com</span><i aria-hidden="true">↗</i>
               </a>
-              <button className="contact-close__copy" type="button" onClick={copyEmail} aria-label="复制邮箱地址">
-                复制
+              <button className="contact-close__copy" type="button" onClick={copyEmail} aria-label="复制邮箱地址" data-state={copyStatus}>
+                <span className="contact-close__copy-icon" aria-hidden="true"><i/><i/><b>✓</b></span><span>复制</span>
               </button>
             </div>
             <div className="contact-close__status" aria-live="polite" role="status">
@@ -168,12 +171,16 @@ function Contact() {
             </div>
             <a className="contact-close__github" href="https://github.com/xuanyu6868" target="_blank" rel="noreferrer">GitHub <span aria-hidden="true">↗</span></a>
           </Reveal>
+          <button className="contact-terminal" type="button" data-open={terminalOpen} aria-expanded={terminalOpen} aria-label={terminalOpen ? "收起开发者终端动画" : "展开开发者终端动画"} onClick={() => setTerminalOpen(!terminalOpen)}>
+            <span className="contact-terminal__top" aria-hidden="true"><i/><i/><i/><span>hello.sh</span></span>
+            <span className="contact-terminal__screen" aria-hidden="true"><span className="contact-terminal__line"><b>&gt;</b> hello</span><span className="contact-terminal__line"><b>&gt;</b> 可以一起聊聊<span className="contact-terminal__caret"/></span></span>
+          </button>
         </div>
 
         <footer className="contact-close__footer">
           <span>禤宇 © 2026</span>
           <span>AI Native 全栈工程师</span>
-          <span>设计 + 代码：禤宇 · 监工：猫</span>
+          <span>设计 + 代码：禤宇 · 监工：猫<button className="contact-cat-peek" type="button" data-open={catOpen} aria-pressed={catOpen} aria-label={catOpen ? "让小猫躲起来" : "让小猫探头"} onClick={() => setCatOpen(!catOpen)}><svg viewBox="0 0 48 38" aria-hidden="true"><path className="contact-cat-peek__face" d="M7 29V13L11 4l9 6c3-1 6-1 9 0l9-6 3 10v15c0 7-7 9-17 9S7 36 7 29Z"/><path className="contact-cat-peek__eyes" d="M16 23h.1M32 23h.1"/><path className="contact-cat-peek__detail" d="M22 28l2 2 2-2M10 28l-6-1m7 4-6 2m32-5 6-1m-7 4 6 2"/></svg></button></span>
           <a href="#top" className="contact-close__back">回到顶部 <span aria-hidden="true">↑</span></a>
         </footer>
       </div>

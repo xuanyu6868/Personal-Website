@@ -133,3 +133,77 @@
   .contact-close *, .contact-close *::before, .contact-close *::after { transition-duration: 0s !important; animation-duration: 0s !important; scroll-behavior: auto; }
   .contact-close__title h2:hover, .contact-close__title h2:hover .contact-close__dot { transform: none; }
 }
+
+/* Five small interactions for the contact page. */
+.contact-close__main { position: relative; }
+.contact-close__char { display: inline-block; transition: transform .45s cubic-bezier(.2,.85,.25,1.25), color .35s ease; }
+.contact-close__title.is-visible .contact-close__char { animation: contact-letter-in .65s cubic-bezier(.22,1,.36,1) backwards; animation-delay: calc(var(--char-index) * 90ms + 100ms); }
+@keyframes contact-letter-in { from { opacity: 0; transform: translateY(32px); } to { opacity: 1; transform: translateY(0); } }
+
+.contact-close__envelope { position: relative; flex: none; display: inline-block; width: 33px; height: 24px; margin-right: 1px; perspective: 180px; }
+.contact-close__envelope-body { position: absolute; inset: 3px 0 0; z-index: 3; border: 1px solid rgba(179,232,248,.9); border-radius: 2px; background: linear-gradient(147deg, transparent 47%, rgba(133,216,241,.65) 49%, transparent 51%) bottom left/50% 100% no-repeat, linear-gradient(213deg, transparent 47%, rgba(133,216,241,.65) 49%, transparent 51%) bottom right/50% 100% no-repeat, rgba(8,42,49,.92); }
+.contact-close__flap { position: absolute; left: 1px; top: 4px; z-index: 4; width: 31px; height: 12px; background: #8bd4ef; clip-path: polygon(0 0,100% 0,50% 95%); transform-origin: top; transition: transform .4s ease, opacity .4s ease; }
+.contact-close__letter { position: absolute; left: 5px; top: 5px; z-index: 2; width: 23px; height: 16px; border: 1px solid rgba(185,238,255,.85); background: #c7effa; transition: transform .45s cubic-bezier(.22,1,.36,1); }
+.contact-close__letter::after { content: ""; position: absolute; left: 4px; top: 4px; width: 12px; height: 4px; border-top: 1px solid #60a6bd; border-bottom: 1px solid #60a6bd; }
+.contact-close__email:focus-visible .contact-close__flap { transform: rotateX(175deg); opacity: .7; }
+.contact-close__email:focus-visible .contact-close__letter { transform: translateY(-10px); }
+
+.contact-close__copy { display: inline-flex; align-items: center; justify-content: center; gap: 8px; min-width: 78px; }
+.contact-close__copy-icon { position: relative; width: 14px; height: 15px; flex: none; }
+.contact-close__copy-icon i { position: absolute; width: 9px; height: 11px; border: 1px solid currentColor; border-radius: 1px; transition: transform .35s ease, opacity .25s ease; }
+.contact-close__copy-icon i:first-child { left: 1px; top: 0; opacity: .7; }
+.contact-close__copy-icon i:nth-child(2) { left: 4px; top: 3px; background: rgba(9, 49, 56, .95); }
+.contact-close__copy-icon b { position: absolute; inset: -2px 0 0; opacity: 0; color: #8ce4ff; font-size: 17px; line-height: 1; transform: scale(.6); transition: transform .3s ease, opacity .3s ease; }
+.contact-close__copy[data-state="copied"] .contact-close__copy-icon i:first-child { transform: translate(-5px,-4px); opacity: 0; }
+.contact-close__copy[data-state="copied"] .contact-close__copy-icon i:nth-child(2) { transform: translate(4px,3px); opacity: 0; }
+.contact-close__copy[data-state="copied"] .contact-close__copy-icon b { opacity: 1; transform: scale(1); }
+
+.contact-terminal { position: absolute; left: -130px; top: 39%; width: 182px; min-height: 95px; padding: 0; overflow: hidden; border: 1px solid rgba(141,213,232,.42); border-radius: 4px; background: rgba(6,29,36,.65); color: #d3f0f6; font: 12px/1.5 ui-monospace, SFMono-Regular, monospace; text-align: left; cursor: pointer; box-shadow: 0 12px 30px rgba(0,0,0,.13); transition: border-color .35s ease, transform .35s ease; }
+.contact-terminal__top { display: flex; align-items: center; gap: 4px; height: 26px; padding: 0 10px; border-bottom: 1px solid rgba(160,220,235,.17); color: rgba(210,240,247,.65); font-size: 10px; }
+.contact-terminal__top i { width: 4px; height: 4px; border-radius: 50%; background: rgba(175,222,234,.5); }
+.contact-terminal__top span { margin-left: 7px; }
+.contact-terminal__screen { position: relative; display: flex; min-height: 68px; flex-direction: column; gap: 6px; padding: 10px; }
+.contact-terminal__screen::before { content: "> _"; position: absolute; left: 10px; top: 10px; color: rgba(167,224,237,.65); transition: opacity .2s ease; }
+.contact-terminal__line { display: block; overflow: hidden; width: 100%; white-space: nowrap; opacity: 0; }
+.contact-terminal__line b { color: #60d0f8; font-weight: 500; }
+.contact-terminal__caret { display: inline-block; height: 11px; width: 5px; margin-left: 4px; background: #83dfff; vertical-align: -1px; }
+.contact-terminal[data-open="true"], .contact-terminal:focus-visible { border-color: rgba(129,221,248,.85); }
+.contact-terminal[data-open="true"] .contact-terminal__screen::before, .contact-terminal:focus-visible .contact-terminal__screen::before { opacity: 0; }
+.contact-terminal[data-open="true"] .contact-terminal__line, .contact-terminal:focus-visible .contact-terminal__line { animation: contact-type .9s steps(16,end) both; }
+.contact-terminal[data-open="true"] .contact-terminal__line:nth-child(2), .contact-terminal:focus-visible .contact-terminal__line:nth-child(2) { animation-delay: .65s; }
+@keyframes contact-type { from { opacity: 1; clip-path: inset(0 100% 0 0); } to { opacity: 1; clip-path: inset(0 0 0 0); } }
+
+.contact-cat-peek { position: relative; display: inline-block; width: 34px; height: 25px; margin: 0 0 -6px 5px; padding: 0; overflow: hidden; border: 0; border-bottom: 1px solid rgba(174,229,243,.65); background: transparent; vertical-align: baseline; cursor: pointer; }
+.contact-cat-peek svg { position: absolute; left: 1px; top: 0; width: 32px; height: 26px; transform: translateY(16px); transition: transform .5s cubic-bezier(.22,1,.36,1); }
+.contact-cat-peek__face { fill: #d1edf2; stroke: #86d7ee; stroke-width: 1.2; }
+.contact-cat-peek__detail, .contact-cat-peek__eyes { fill: none; stroke: #193f49; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.contact-cat-peek[data-open="true"] svg, .contact-cat-peek:focus-visible svg { transform: translateY(1px); }
+.contact-cat-peek[data-open="true"] .contact-cat-peek__eyes, .contact-cat-peek:focus-visible .contact-cat-peek__eyes { transform-origin: 50% 61%; animation: contact-cat-blink 3.2s ease-in-out infinite; }
+@keyframes contact-cat-blink { 0%, 42%, 47%, 100% { transform: scaleY(1); } 44%, 45% { transform: scaleY(.08); } }
+
+@media (hover: hover) and (pointer: fine) {
+  .contact-close__char:hover { color: #dcf5ff; transform: translateY(-9px) rotate(-2deg) scale(1.04); }
+  .contact-close__email:hover .contact-close__flap { transform: rotateX(175deg); opacity: .7; }
+  .contact-close__email:hover .contact-close__letter { transform: translateY(-10px); }
+  .contact-terminal:hover { border-color: rgba(129,221,248,.85); transform: translateY(-3px); }
+  .contact-terminal:hover .contact-terminal__screen::before { opacity: 0; }
+  .contact-terminal:hover .contact-terminal__line { animation: contact-type .9s steps(16,end) both; }
+  .contact-terminal:hover .contact-terminal__line:nth-child(2) { animation-delay: .65s; }
+  .contact-cat-peek:hover svg { transform: translateY(1px); }
+  .contact-cat-peek:hover .contact-cat-peek__eyes { transform-origin: 50% 61%; animation: contact-cat-blink 3.2s ease-in-out infinite; }
+}
+@media (max-width: 1100px) {
+  .contact-terminal { position: relative; top: auto; left: auto; display: block; width: 170px; min-height: 70px; margin: 22px auto 0; }
+  .contact-terminal__screen { min-height: 52px; padding: 7px 10px; }
+  .contact-terminal__screen::before { top: 7px; }
+}
+@media (max-width: 420px) {
+  .contact-close__email { font-size: clamp(16px, 4.8vw, 21px); gap: .35em; }
+  .contact-close__envelope { transform: scale(.8); margin-right: -3px; }
+  .contact-close__copy { min-width: 68px; gap: 5px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .contact-close__title.is-visible .contact-close__char, .contact-terminal .contact-terminal__line, .contact-cat-peek__eyes { animation: none !important; }
+  .contact-close__char:hover { transform: none; }
+  .contact-terminal[data-open="true"] .contact-terminal__line, .contact-terminal:focus-visible .contact-terminal__line { opacity: 1; clip-path: none; }
+}
