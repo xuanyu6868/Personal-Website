@@ -127,13 +127,23 @@ function AmbientBackground() {
 }
 function Contact() {
   const [copyStatus, setCopyStatus] = useState<"idle" | "copied" | "failed">("idle");
-  const [terminalOpen, setTerminalOpen] = useState(false);
+  const [terminalPlaying, setTerminalPlaying] = useState(false);
+  const [terminalReplay, setTerminalReplay] = useState(0);
   const [catOpen, setCatOpen] = useState(false);
   const resetTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const terminalTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => () => {
     if (resetTimer.current) clearTimeout(resetTimer.current);
+    if (terminalTimer.current) clearTimeout(terminalTimer.current);
   }, []);
+
+  const playTerminal = () => {
+    setTerminalReplay((value) => value + 1);
+    setTerminalPlaying(true);
+    if (terminalTimer.current) clearTimeout(terminalTimer.current);
+    terminalTimer.current = setTimeout(() => setTerminalPlaying(false), 2000);
+  };
 
   const copyEmail = async () => {
     try {
@@ -171,9 +181,9 @@ function Contact() {
             </div>
             <a className="contact-close__github" href="https://github.com/xuanyu6868" target="_blank" rel="noreferrer">GitHub <span aria-hidden="true">↗</span></a>
           </Reveal>
-          <button className="contact-terminal" type="button" data-open={terminalOpen} aria-expanded={terminalOpen} aria-label={terminalOpen ? "收起开发者终端动画" : "展开开发者终端动画"} onClick={() => setTerminalOpen(!terminalOpen)}>
-            <span className="contact-terminal__top" aria-hidden="true"><i/><i/><i/><span>hello.sh</span></span>
-            <span className="contact-terminal__screen" aria-hidden="true"><span className="contact-terminal__line"><b>&gt;</b> hello</span><span className="contact-terminal__line"><b>&gt;</b> 可以一起聊聊<span className="contact-terminal__caret"/></span></span>
+          <button className="contact-terminal" type="button" data-playing={terminalPlaying} aria-label="播放开发者终端文字动画" onClick={playTerminal}>
+            <span className="contact-terminal__top" aria-hidden="true"><i/><span>hello.sh</span><b>›_</b></span>
+            <span className="contact-terminal__screen" key={terminalReplay} aria-hidden="true"><span className="contact-terminal__line"><b>&gt;</b> hello</span><span className="contact-terminal__line"><b>&gt;</b> 可以一起聊聊<span className="contact-terminal__caret"/></span></span>
           </button>
         </div>
 
