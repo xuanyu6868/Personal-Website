@@ -1,24 +1,24 @@
-/** Find a nearby scene edge without pulling a reader away from mid-page content. */
-export function nearbySceneTarget(
-  current: number,
-  anchors: readonly number[],
-  viewportHeight: number,
-  maxScroll: number,
-): number | null {
-  if (anchors.length === 0 || viewportHeight <= 0) return null;
+function normalizeAnchors(anchors: readonly number[], maxScroll: number): number[] {
   const limit = Math.max(0, maxScroll);
-  let nearest: number | null = null;
-  let distance = Infinity;
-  for (const anchor of anchors) {
-    const position = Math.max(0, Math.min(limit, anchor));
-    const candidateDistance = Math.abs(position - current);
-    if (candidateDistance < distance) {
-      nearest = position;
-      distance = candidateDistance;
-    }
+  return [...new Set(anchors.map((anchor) => Math.max(0, Math.min(limit, anchor))))].sort((a, b) => a - b);
+}
+
+/** Find the next scene in the gesture direction, including from between scenes. */
+export function adjacentSceneTarget(current: number, anchors: readonly number[], direction: number, maxScroll: number): number | null {
+  const positions = normalizeAnchors(anchors, maxScroll);
+  if (direction > 0) return positions.find((position) => position > current + 3) ?? null;
+  for (let i = positions.length - 1; i >= 0; i--) {
+    if (positions[i] < current - 3) return positions[i];
   }
-  const tolerance = Math.min(200, viewportHeight * 0.2);
-  return distance > 3 && distance <= tolerance ? nearest : null;
+  return null;
+}
+
+/** After a free scroll, always land at the closest scene. */
+export function nearestSceneTarget(current: number, anchors: readonly number[], maxScroll: number): number | null {
+  const positions = normalizeAnchors(anchors, maxScroll);
+  if (!positions.length) return null;
+  const nearest = positions.reduce((best, position) => Math.abs(position - current) < Math.abs(best - current) ? position : best);
+  return Math.abs(nearest - current) > 3 ? nearest : null;
 }
 
 /** Prefer a nearby full-resolution frame; do not display a distant wrong frame. */
