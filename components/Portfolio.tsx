@@ -19,6 +19,8 @@ import VoiceProject from "./VoiceProject";
 import WeiClawBook from "./weiclaw-preview/WeiClawBook";
 import SparkCommerceBelt from "./SparkCommerceBelt";
 import { FrameSequenceCache } from "./frameSequenceCache";
+import { preferSharpFrame } from "../lib/scroll-behavior";
+import { installSceneScrollController } from "../lib/scene-scroll-controller";
 
 const EASE = [0.22, 1, 0.36, 1] as const;
 
@@ -507,7 +509,7 @@ function ScrollFrameSequence() {
       lastDrawAt = now;
       const target = desiredFrameRef.current;
       const bestFrame = findNearestHotFrame(target);
-      if (bestFrame !== null && (bestFrame === target || scrollVelocity < FAST_SCROLL_FRAME_VELOCITY)) {
+      if (preferSharpFrame(target, bestFrame, scrollVelocity >= FAST_SCROLL_FRAME_VELOCITY) && bestFrame !== null) {
         drawFrame(bestFrame);
       } else {
         drawFrame(target, true);
@@ -1059,10 +1061,6 @@ function Su7Showcase({
       d: createSu7FrameCache("d", SU7_D_COUNT),
       r: createSu7FrameCache("r", SU7_R_COUNT),
     };
-    for (const kind of drive ? ["d", "r"] : ["a", "t"]) {
-      void frameCaches[kind as Su7FrameKind].prefetchCompressed();
-    }
-
     let raf = 0;
     let inView = false;
     let nearViewport = false;
@@ -1080,7 +1078,9 @@ function Su7Showcase({
     let dragStartFrame = 0;
     let lastPointerX = 0;
     let playDirection: 1 | -1 = 1;
-    let activeSequence: Su7FrameKind = drive ? "d" : variant === "hero" ? "a" : "t";
+    let activeSequence: Su7FrameKind = drive
+      ? (reducedMotion ? "r" : "d")
+      : variant === "hero" && !reducedMotion ? "a" : "t";
     let currentCache = frameCaches[activeSequence];
     let targetFrame = activeSequence === "t" ? Math.floor(tFloat) : 0;
     let drawnSequence: Su7FrameKind | null = null;
@@ -1205,6 +1205,8 @@ function Su7Showcase({
               parked = true;
               tFloat = 0;
             } else {
+              // Warm only the first turntable frames shortly before the transition.
+              if (dFloat >= SU7_D_COUNT - 90) frameCaches.r.setTarget(0, 1, 12);
               drawFrom("d", frameCaches.d, dFloat, SU7_D_COUNT);
             }
           }
@@ -1254,9 +1256,24 @@ function Su7Showcase({
     canvas.addEventListener("pointerup", onPointerUp);
     canvas.addEventListener("pointercancel", onPointerUp);
 
+    const pauseWarming = () => {
+      for (const cache of Object.values(frameCaches)) {
+        cache.pausePrefetch();
+        cache.clearDecoded();
+      }
+    };
+    const startWarming = () => {
+      if (!nearViewport || document.hidden) return;
+      currentCache.setTarget(targetFrame, playDirection, SU7_HOT_FRAMES);
+    };
+
     const preloadObserver = new IntersectionObserver(([entry]) => {
+      const wasNear = nearViewport;
       nearViewport = entry.isIntersecting;
-      currentCache.setTarget(targetFrame, playDirection, nearViewport ? SU7_HOT_FRAMES : 1);
+      if (nearViewport && !wasNear) startWarming();
+      if (!nearViewport && wasNear) {
+        pauseWarming();
+      }
       publishDebug(true);
     }, { rootMargin: "100% 0px", threshold: 0.01 });
 
@@ -1276,21 +1293,34 @@ function Su7Showcase({
           // 每次进入视口（从上或从下）都从头重播甩尾入场
           dFloat = 0;
           parked = !!reducedMotion;
-          frameCaches.d.setTarget(0, 1);
+          if (!reducedMotion && !document.hidden) frameCaches.d.setTarget(0, 1);
         }
-        raf = requestAnimationFrame(tick);
+        last = performance.now();
+        if (!document.hidden) raf = requestAnimationFrame(tick);
       }
     }, { threshold: 0.3 });
-    currentCache.setTarget(targetFrame, 1, 1);
+    const onVisibilityChange = () => {
+      if (document.hidden) {
+        cancelAnimationFrame(raf);
+        pauseWarming();
+      } else {
+        startWarming();
+        if (inView) {
+          last = performance.now();
+          raf = requestAnimationFrame(tick);
+        }
+      }
+    };
+    document.addEventListener("visibilitychange", onVisibilityChange);
     publishDebug(true);
     preloadObserver.observe(canvas);
     io.observe(canvas);
-    raf = requestAnimationFrame(tick);
 
     return () => {
       cancelAnimationFrame(raf);
       preloadObserver.disconnect();
       io.disconnect();
+      document.removeEventListener("visibilitychange", onVisibilityChange);
       for (const cache of Object.values(frameCaches)) cache.destroy();
       if (debugEnabled) {
         delete window.__SU7_DEBUG__;
@@ -3042,314 +3072,10 @@ function SceneRail() {
 
 function SceneSnapController() {
   const reduceMotion = useReducedMotion();
-
   useEffect(() => {
     if (reduceMotion) return;
-
-    const headerOffset = 0;
-    const GESTURE_WINDOW = 280;
-    const GESTURE_SETTLE_DELAY = 280;
-    // Keep ordinary mouse-wheel notches on the browser's native scroll path.
-    // Trackpad gestures still enter the damped scene-snap path when their
-    // individual deltas are small enough to be classified as a light swipe.
-    const LIGHT_WHEEL_MAX = 48;
-    const LIGHT_CLASSIFICATION_DELAY = 90;
-    const DAMPING_DURATION = 780;
-    const LIGHT_GESTURE_COOLDOWN = 420;
-    const LIGHT_GESTURE_MAX = 0.34;
-    const GLIDE_LIFETIME = 1500;
-
-    let gestureDelta = 0;
-    let gestureStartScroll = 0;
-    let lastWheelAt = 0;
-    let lightGestureLockUntil = 0;
-    let lightGestureTimer: number | null = null;
-    let lightGestureDirection = 0;
-    let nativeGestureActive = false;
-    let gliding = false;
-    let glideUntil = 0;
-    let corrected = false;
-    let glideTargetTop = 0;
-    let settleTimer: number | null = null;
-    let animationFrame: number | null = null;
-    let cachedAnchors: { scene: HTMLElement; top: number }[] | null = null;
-
-    const getSceneAnchors = () => {
-      if (cachedAnchors) return cachedAnchors;
-      const currentScroll = window.scrollY;
-      cachedAnchors = Array.from(document.querySelectorAll<HTMLElement>("[data-scene-index]"))
-        .map((scene) => ({
-          scene,
-          top: Math.max(0, scene.getBoundingClientRect().top + currentScroll - (scene.dataset.sceneIndex === "00" ? 0 : headerOffset)),
-        }))
-        .sort((a, b) => a.top - b.top);
-      return cachedAnchors;
-    };
-    const invalidateAnchors = () => {
-      cachedAnchors = null;
-    };
-
-    const wheelPixels = (event: WheelEvent) => {
-      if (event.deltaMode === 1) return event.deltaY * 16;
-      if (event.deltaMode === 2) return event.deltaY * 100;
-      return event.deltaY;
-    };
-
-    const isDiscreteWheel = (event: WheelEvent, magnitude: number) =>
-      event.deltaMode !== 0
-      || (Number.isInteger(event.deltaY) && magnitude >= LIGHT_WHEEL_MAX);
-
-    const clampSceneIndex = (index: number, anchors: { top: number }[]) =>
-      Math.min(anchors.length - 1, Math.max(0, index));
-
-    const currentSceneIndex = (scrollTop: number, anchors: { top: number }[]) => {
-      const nextIndex = anchors.findIndex(({ top }) => top > scrollTop + 2);
-      return nextIndex === -1 ? anchors.length - 1 : Math.max(0, nextIndex - 1);
-    };
-
-    const nearestSceneIndex = (scrollTop: number, anchors: { top: number }[]) =>
-      anchors.reduce((nearestIndex, anchor, index) =>
-        Math.abs(anchor.top - scrollTop) < Math.abs(anchors[nearestIndex].top - scrollTop)
-          ? index
-          : nearestIndex, 0);
-
-    const cancelAnimation = () => {
-      if (animationFrame !== null) window.cancelAnimationFrame(animationFrame);
-      animationFrame = null;
-      gliding = false;
-    };
-
-    const animateTo = (targetTop: number) => {
-      cancelAnimation();
-      const startTop = window.scrollY;
-      const distance = targetTop - startTop;
-      if (Math.abs(distance) < 24) return;
-
-      const startedAt = performance.now();
-      lightGestureDirection = Math.sign(distance);
-      gliding = true;
-      lightGestureLockUntil = Date.now() + DAMPING_DURATION + LIGHT_GESTURE_COOLDOWN;
-      glideUntil = Date.now() + GLIDE_LIFETIME;
-      corrected = false;
-      glideTargetTop = targetTop;
-
-      const animateFrame = (now: number) => {
-        const progress = Math.min(1, (now - startedAt) / DAMPING_DURATION);
-        const easedProgress = progress < 0.5
-          ? 4 * Math.pow(progress, 3)
-          : 1 - Math.pow(-2 * progress + 2, 3) / 2;
-        window.scrollTo({ top: startTop + distance * easedProgress, behavior: "instant" });
-        if (progress < 1) {
-          animationFrame = window.requestAnimationFrame(animateFrame);
-          return;
-        }
-        animationFrame = null;
-        gliding = false;
-        window.scrollTo({ top: targetTop, behavior: "instant" });
-      };
-
-      animationFrame = window.requestAnimationFrame(animateFrame);
-    };
-
-    const clearLightGestureTimer = () => {
-      if (lightGestureTimer !== null) window.clearTimeout(lightGestureTimer);
-      lightGestureTimer = null;
-    };
-
-    const startLightGesture = (direction: number) => {
-      lightGestureTimer = null;
-      const anchors = getSceneAnchors();
-      if (anchors.length === 0) return;
-      const currentScroll = window.scrollY;
-      const currentIndex = currentSceneIndex(currentScroll, anchors);
-      const targetIndex = direction < 0 && currentScroll - anchors[currentIndex].top > 24
-        ? currentIndex
-        : clampSceneIndex(currentIndex + direction, anchors);
-      const target = anchors[targetIndex];
-      if (!target) return;
-
-      gestureDelta = 0;
-      nativeGestureActive = false;
-      animateTo(target.top);
-    };
-
-    const settleGesture = () => {
-      settleTimer = null;
-      if (gestureDelta === 0 || gliding) return;
-
-      const anchors = getSceneAnchors();
-      if (anchors.length === 0) {
-        gestureDelta = 0;
-        return;
-      }
-
-      const direction = gestureDelta > 0 ? 1 : -1;
-      const startIndex = currentSceneIndex(gestureStartScroll, anchors);
-      const movement = Math.abs(window.scrollY - gestureStartScroll);
-      const targetIndex = movement < window.innerHeight * LIGHT_GESTURE_MAX
-        ? clampSceneIndex(startIndex + direction, anchors)
-        : nearestSceneIndex(window.scrollY, anchors);
-      const target = anchors[targetIndex];
-      gestureDelta = 0;
-      if (!target) return;
-
-      const distance = Math.abs(target.top - window.scrollY);
-      if (distance < 24) return;
-
-      animateTo(target.top);
-    };
-
-    const scheduleSnap = () => {
-      if (settleTimer !== null) window.clearTimeout(settleTimer);
-      settleTimer = window.setTimeout(settleGesture, GESTURE_SETTLE_DELAY);
-    };
-
-    const onWheel = (event: WheelEvent) => {
-      // 覆盖层(项目简介弹窗等)打开时,滚轮完全交给覆盖层自己处理
-      if (document.body.dataset.overlayOpen === "true") return;
-
-      const now = Date.now();
-      const delta = wheelPixels(event);
-      const magnitude = Math.abs(delta);
-      if (magnitude < 1) return;
-
-      // A mouse wheel emits discrete line/notch-sized deltas. Let those events
-      // stay fully native so a single notch is never delayed by scene snapping.
-      if (isDiscreteWheel(event, magnitude)) {
-        clearLightGestureTimer();
-        if (settleTimer !== null) window.clearTimeout(settleTimer);
-        settleTimer = null;
-        cancelAnimation();
-        lightGestureLockUntil = 0;
-        corrected = false;
-        gestureDelta = 0;
-        nativeGestureActive = true;
-        lastWheelAt = now;
-        return;
-      }
-
-      event.stopPropagation();
-      const wheelDirection = Math.sign(delta);
-
-      // A trackpad swipe can emit momentum events after the damping animation
-      // has already landed. Keep the whole burst as one scene transition.
-      if (now < lightGestureLockUntil) {
-        if (magnitude <= LIGHT_WHEEL_MAX && wheelDirection === lightGestureDirection) {
-          event.preventDefault();
-          return;
-        }
-
-        if (wheelDirection !== lightGestureDirection) {
-          clearLightGestureTimer();
-          lightGestureLockUntil = 0;
-          cancelAnimation();
-          corrected = false;
-          gestureDelta = 0;
-          nativeGestureActive = false;
-        } else {
-          // If the gesture grows beyond the light threshold, it is a deliberate
-          // large swipe rather than momentum. Hand it back to native scrolling.
-          cancelAnimation();
-          lightGestureLockUntil = 0;
-          corrected = false;
-          gestureDelta = 0;
-          gestureStartScroll = window.scrollY;
-          nativeGestureActive = true;
-        }
-      }
-
-      if (magnitude > LIGHT_WHEEL_MAX) clearLightGestureTimer();
-
-      // Momentum from the same light gesture should not interrupt the damping
-      // animation. A paused wheel starts a fresh gesture from its position.
-      if (gliding && now < glideUntil) {
-        if (now - lastWheelAt <= GESTURE_WINDOW) {
-          lastWheelAt = now;
-          event.preventDefault();
-          return;
-        }
-        cancelAnimation();
-        corrected = false;
-        gestureDelta = 0;
-      }
-
-      if (nativeGestureActive && now - lastWheelAt > GESTURE_WINDOW) {
-        nativeGestureActive = false;
-      }
-
-      if (!nativeGestureActive && magnitude <= LIGHT_WHEEL_MAX) {
-        event.preventDefault();
-        lastWheelAt = now;
-        gestureDelta = 0;
-        nativeGestureActive = false;
-        if (lightGestureTimer === null) {
-          const direction = delta > 0 ? 1 : -1;
-          lightGestureTimer = window.setTimeout(
-            () => startLightGesture(direction),
-            LIGHT_CLASSIFICATION_DELAY,
-          );
-        }
-        return;
-      }
-
-      // Large gestures remain native so the user can cross multiple scenes.
-      if (!nativeGestureActive) {
-        gestureDelta = 0;
-        gestureStartScroll = window.scrollY;
-        nativeGestureActive = true;
-      }
-      lastWheelAt = now;
-      gestureDelta += delta;
-      scheduleSnap();
-    };
-
-    // Quiet landing aid: while a glide is finishing, if the browser's smooth
-    // scroll rests a hair off the anchor, nudge it once. Never fires while the
-    // user is scrolling on their own.
-    const onScroll = () => {
-      if (animationFrame !== null) return;
-      if (!gliding || Date.now() > glideUntil || corrected) return;
-      const distance = Math.abs(glideTargetTop - window.scrollY);
-      if (distance > 160 || distance < 10) return;
-      corrected = true;
-      window.scrollTo({ top: glideTargetTop, behavior: "smooth" });
-    };
-
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key !== "PageDown" && event.key !== "PageUp") return;
-      if (gliding) return;
-      clearLightGestureTimer();
-      if (settleTimer !== null) window.clearTimeout(settleTimer);
-      settleTimer = null;
-      gestureDelta = 0;
-      const anchors = getSceneAnchors();
-      if (anchors.length === 0) return;
-      const currentScroll = window.scrollY;
-      const nextIndex = anchors.findIndex(({ top }) => top > currentScroll + 2);
-      const currentIndex = nextIndex === -1 ? anchors.length - 1 : Math.max(0, nextIndex - 1);
-      const target = event.key === "PageDown"
-        ? anchors[Math.min(currentIndex + 1, anchors.length - 1)]
-        : anchors[Math.max(currentIndex - 1, 0)];
-      if (!target) return;
-      event.preventDefault();
-      animateTo(target.top);
-    };
-
-    window.addEventListener("wheel", onWheel, { passive: false, capture: true });
-    window.addEventListener("scroll", onScroll, { passive: true });
-    window.addEventListener("keydown", onKeyDown);
-    window.addEventListener("resize", invalidateAnchors);
-    return () => {
-      window.removeEventListener("wheel", onWheel, { capture: true });
-      window.removeEventListener("scroll", onScroll);
-      window.removeEventListener("keydown", onKeyDown);
-      window.removeEventListener("resize", invalidateAnchors);
-      if (settleTimer !== null) window.clearTimeout(settleTimer);
-      clearLightGestureTimer();
-      cancelAnimation();
-    };
+    return installSceneScrollController();
   }, [reduceMotion]);
-
   return null;
 }
 
