@@ -147,6 +147,36 @@ test("clearing decoded frames retains compressed assets", async () => {
   cache.destroy();
 });
 
+test("repeated targets retain the current frames and can be restored after clearing", async () => {
+  const { cache, loadCalls, decodedFrames } = createHarness({ count: 12, hotLimit: 5 });
+  cache.setTarget(2, 1);
+  await flush();
+  const firstFrames = [...decodedFrames];
+  const firstLoads = loadCalls.length;
+  for (let i = 0; i < 100; i++) cache.setTarget(2, 1);
+  await flush();
+  assert.equal(loadCalls.length, firstLoads);
+  assert.ok(firstFrames.every((frame) => frame.closed === 0));
+  cache.clearDecoded();
+  cache.setTarget(2, 1);
+  await flush();
+  assert.equal(cache.decodedCount, 5);
+  assert.equal(loadCalls.length, firstLoads);
+  cache.destroy();
+});
+
+test("a rolling car frame window does not download the entire entrance sequence", async () => {
+  const { cache, loadCalls } = createHarness({ count: 400, hotLimit: 48 });
+  cache.setTarget(0, 1);
+  await flush(100);
+  assert.equal(loadCalls.length, 48);
+  assert.equal(cache.decodedCount, 48);
+  cache.setTarget(1, 1);
+  await flush();
+  assert.equal(loadCalls.length, 49);
+  cache.destroy();
+});
+
 test("deduplicates background and on-demand compressed loads", async () => {
   const { cache, loadCalls } = createHarness({ count: 4, hotLimit: 1 });
   const warming = cache.prefetchCompressed();

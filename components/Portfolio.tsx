@@ -1203,6 +1203,8 @@ function Su7Showcase({
               parked = true;
               tFloat = 0;
             } else {
+              // Warm only the first turntable frames shortly before the transition.
+              if (dFloat >= SU7_D_COUNT - 90) frameCaches.r.setTarget(0, 1, 12);
               drawFrom("d", frameCaches.d, dFloat, SU7_D_COUNT);
             }
           }
@@ -1253,15 +1255,14 @@ function Su7Showcase({
     canvas.addEventListener("pointercancel", onPointerUp);
 
     const pauseWarming = () => {
-      for (const cache of Object.values(frameCaches)) cache.pausePrefetch();
+      for (const cache of Object.values(frameCaches)) {
+        cache.pausePrefetch();
+        cache.clearDecoded();
+      }
     };
     const startWarming = () => {
       if (!nearViewport || document.hidden) return;
       currentCache.setTarget(targetFrame, playDirection, SU7_HOT_FRAMES);
-      const kinds: Su7FrameKind[] = reducedMotion
-        ? [drive ? "r" : "t"]
-        : drive ? ["d", "r"] : ["a", "t"];
-      for (const kind of kinds) void frameCaches[kind].prefetchCompressed();
     };
 
     const preloadObserver = new IntersectionObserver(([entry]) => {
@@ -1270,7 +1271,6 @@ function Su7Showcase({
       if (nearViewport && !wasNear) startWarming();
       if (!nearViewport && wasNear) {
         pauseWarming();
-        for (const cache of Object.values(frameCaches)) cache.clearDecoded();
       }
       publishDebug(true);
     }, { rootMargin: "100% 0px", threshold: 0.01 });

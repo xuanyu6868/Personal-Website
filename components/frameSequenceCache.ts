@@ -32,6 +32,7 @@ export class FrameSequenceCache {
   private queue: number[] = [];
   private warmPromise: Promise<void> | null = null;
   private warmGeneration = 0;
+  private targetKey: string | null = null;
   private destroyed = false;
 
   constructor({
@@ -139,6 +140,9 @@ export class FrameSequenceCache {
 
     const center = this.normalize(index);
     const windowSize = Math.max(1, Math.min(this.hotLimit, Math.round(limit)));
+    const targetKey = `${center}:${direction}:${windowSize}`;
+    if (this.targetKey === targetKey) return;
+    this.targetKey = targetKey;
     const forwardSlots = Math.ceil((windowSize - 1) * 0.75);
     const backwardSlots = windowSize - 1 - forwardSlots;
     const ordered: number[] = [];
@@ -224,6 +228,7 @@ export class FrameSequenceCache {
   }
 
   clearDecoded() {
+    this.targetKey = null;
     this.desired.clear();
     this.queue = [];
     for (const timer of this.retryTimers.values()) clearTimeout(timer);
