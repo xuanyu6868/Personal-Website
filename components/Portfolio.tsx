@@ -1059,10 +1059,6 @@ function Su7Showcase({
       d: createSu7FrameCache("d", SU7_D_COUNT),
       r: createSu7FrameCache("r", SU7_R_COUNT),
     };
-    for (const kind of drive ? ["d", "r"] : ["a", "t"]) {
-      void frameCaches[kind as Su7FrameKind].prefetchCompressed();
-    }
-
     let raf = 0;
     let inView = false;
     let nearViewport = false;
@@ -1080,7 +1076,9 @@ function Su7Showcase({
     let dragStartFrame = 0;
     let lastPointerX = 0;
     let playDirection: 1 | -1 = 1;
-    let activeSequence: Su7FrameKind = drive ? "d" : variant === "hero" ? "a" : "t";
+    let activeSequence: Su7FrameKind = drive
+      ? (reducedMotion ? "r" : "d")
+      : variant === "hero" && !reducedMotion ? "a" : "t";
     let currentCache = frameCaches[activeSequence];
     let targetFrame = activeSequence === "t" ? Math.floor(tFloat) : 0;
     let drawnSequence: Su7FrameKind | null = null;
@@ -1254,9 +1252,26 @@ function Su7Showcase({
     canvas.addEventListener("pointerup", onPointerUp);
     canvas.addEventListener("pointercancel", onPointerUp);
 
+    const pauseWarming = () => {
+      for (const cache of Object.values(frameCaches)) cache.pausePrefetch();
+    };
+    const startWarming = () => {
+      if (!nearViewport || document.hidden) return;
+      currentCache.setTarget(targetFrame, playDirection, SU7_HOT_FRAMES);
+      const kinds: Su7FrameKind[] = reducedMotion
+        ? [drive ? "r" : "t"]
+        : drive ? ["d", "r"] : ["a", "t"];
+      for (const kind of kinds) void frameCaches[kind].prefetchCompressed();
+    };
+
     const preloadObserver = new IntersectionObserver(([entry]) => {
+      const wasNear = nearViewport;
       nearViewport = entry.isIntersecting;
-      currentCache.setTarget(targetFrame, playDirection, nearViewport ? SU7_HOT_FRAMES : 1);
+      if (nearViewport && !wasNear) startWarming();
+      if (!nearViewport && wasNear) {
+        pauseWarming();
+        for (const cache of Object.values(frameCaches)) cache.clearDecoded();
+      }
       publishDebug(true);
     }, { rootMargin: "100% 0px", threshold: 0.01 });
 
@@ -1276,21 +1291,34 @@ function Su7Showcase({
           // 每次进入视口（从上或从下）都从头重播甩尾入场
           dFloat = 0;
           parked = !!reducedMotion;
-          frameCaches.d.setTarget(0, 1);
+          if (!reducedMotion && !document.hidden) frameCaches.d.setTarget(0, 1);
         }
-        raf = requestAnimationFrame(tick);
+        last = performance.now();
+        if (!document.hidden) raf = requestAnimationFrame(tick);
       }
     }, { threshold: 0.3 });
-    currentCache.setTarget(targetFrame, 1, 1);
+    const onVisibilityChange = () => {
+      if (document.hidden) {
+        cancelAnimationFrame(raf);
+        pauseWarming();
+      } else {
+        startWarming();
+        if (inView) {
+          last = performance.now();
+          raf = requestAnimationFrame(tick);
+        }
+      }
+    };
+    document.addEventListener("visibilitychange", onVisibilityChange);
     publishDebug(true);
     preloadObserver.observe(canvas);
     io.observe(canvas);
-    raf = requestAnimationFrame(tick);
 
     return () => {
       cancelAnimationFrame(raf);
       preloadObserver.disconnect();
       io.disconnect();
+      document.removeEventListener("visibilitychange", onVisibilityChange);
       for (const cache of Object.values(frameCaches)) cache.destroy();
       if (debugEnabled) {
         delete window.__SU7_DEBUG__;

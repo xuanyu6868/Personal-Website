@@ -31,6 +31,7 @@ export class FrameSequenceCache {
   private desired = new Set<number>();
   private queue: number[] = [];
   private warmPromise: Promise<void> | null = null;
+  private warmGeneration = 0;
   private destroyed = false;
 
   constructor({
@@ -109,9 +110,10 @@ export class FrameSequenceCache {
     if (this.destroyed) return Promise.resolve();
     if (this.warmPromise) return this.warmPromise;
 
+    const generation = this.warmGeneration;
     let next = 0;
     const worker = async () => {
-      while (!this.destroyed && next < this.count) {
+      while (!this.destroyed && generation === this.warmGeneration && next < this.count) {
         const index = next++;
         try {
           await this.ensureBlob(index);
@@ -120,8 +122,16 @@ export class FrameSequenceCache {
         }
       }
     };
-    this.warmPromise = Promise.all([worker(), worker()]).then(() => undefined);
-    return this.warmPromise;
+    const promise = Promise.all([worker(), worker()]).then(() => undefined).finally(() => {
+      if (this.warmPromise === promise) this.warmPromise = null;
+    });
+    this.warmPromise = promise;
+    return promise;
+  }
+
+  pausePrefetch() {
+    this.warmGeneration += 1;
+    this.warmPromise = null;
   }
 
   setTarget(index: number, direction: 1 | -1 = 1, limit = this.hotLimit) {
@@ -225,6 +235,7 @@ export class FrameSequenceCache {
 
   destroy() {
     this.destroyed = true;
+    this.pausePrefetch();
     this.clearDecoded();
     this.blobs.clear();
   }

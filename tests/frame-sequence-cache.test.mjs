@@ -158,6 +158,66 @@ test("deduplicates background and on-demand compressed loads", async () => {
   cache.destroy();
 });
 
+test("pauses background prefetch and resumes without refetching cached frames", async () => {
+  const calls = [];
+  const pending = new Map();
+  const cache = new FrameSequenceCache({
+    count: 6,
+    load: (index) => {
+      calls.push(index);
+      return new Promise((resolve) => pending.set(index, () => resolve(new Blob([String(index)]))));
+    },
+    decode: async () => ({ width: 1, height: 1 }),
+  });
+  const first = cache.prefetchCompressed();
+  assert.deepEqual(calls, [0, 1]);
+  cache.pausePrefetch();
+  pending.get(0)();
+  pending.get(1)();
+  await first;
+  assert.deepEqual(calls, [0, 1]);
+
+  const resumed = cache.prefetchCompressed();
+  await flush();
+  assert.deepEqual(calls, [0, 1, 2, 3]);
+  pending.get(2)();
+  pending.get(3)();
+  await flush();
+  pending.get(4)();
+  pending.get(5)();
+  await resumed;
+  assert.equal(cache.compressedCount, 6);
+  assert.equal(new Set(calls).size, 6);
+  cache.destroy();
+});
+
+test("an old paused prefetch cannot disrupt a newer prefetch", async () => {
+  const calls = [];
+  const pending = new Map();
+  const cache = new FrameSequenceCache({
+    count: 4,
+    load: (index) => {
+      calls.push(index);
+      return new Promise((resolve) => pending.set(index, () => resolve(new Blob([String(index)]))));
+    },
+    decode: async () => ({ width: 1, height: 1 }),
+  });
+  const oldPrefetch = cache.prefetchCompressed();
+  cache.pausePrefetch();
+  const newPrefetch = cache.prefetchCompressed();
+  pending.get(0)();
+  pending.get(1)();
+  await oldPrefetch;
+  await flush();
+  assert.equal(cache.prefetchCompressed(), newPrefetch);
+  assert.deepEqual(calls, [0, 1, 2, 3]);
+  pending.get(2)();
+  pending.get(3)();
+  await newPrefetch;
+  assert.equal(cache.compressedCount, 4);
+  cache.destroy();
+});
+
 test("destroy closes retained frames and stops future scheduling", async () => {
   const { cache, decodedFrames, loadCalls } = createHarness();
   cache.setTarget(0);
