@@ -100,7 +100,7 @@ export function installSceneScrollController(win: Window & typeof globalThis = w
   };
   const wheelPixels = (event: WheelEvent) => event.deltaY * (event.deltaMode === 1 ? 16 : event.deltaMode === 2 ? win.innerHeight : 1);
   const onWheel = (event: WheelEvent) => {
-    if (event.ctrlKey || Math.abs(event.deltaY) < 1 || Math.abs(event.deltaX) > Math.abs(event.deltaY)
+    if (event.ctrlKey || Math.abs(event.deltaY) < 0.1 || Math.abs(event.deltaX) > Math.abs(event.deltaY)
       || doc.body.dataset.overlayOpen === "true" || isNestedScroll(event)) {
       reset();
       return;

@@ -61,6 +61,14 @@ test("a mouse wheel notch goes to the adjacent scene", () => {
   }
 });
 
+test("a small fractional trackpad gesture still advances one scene", () => {
+  const h = createHarness();
+  assert.equal(h.wheel({ deltaY: 0.5 }), true);
+  h.advance(70); h.render(600);
+  assert.equal(h.win.scrollY, 1000);
+  h.stop();
+});
+
 test("a fast gesture remains free and settles to the nearest scene even from the middle", () => {
   const h = createHarness(); assert.equal(h.wheel({ deltaY: 80 }), false);
   h.scrollTo(1550); h.advance(219); assert.equal(h.frames.size, 0);
