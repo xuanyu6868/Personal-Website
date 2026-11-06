@@ -14,6 +14,7 @@ import { projects, type Project, type ProjectVisual as VisualType } from "../dat
 import NoteSyncGallery from "./NoteSyncGallery";
 import HomeHero from "./HomeHero";
 import CapabilityStory from "./CapabilityStory";
+import "../app/contact-close.css";
 import VoiceProject from "./VoiceProject";
 import WeiClawBook from "./weiclaw-preview/WeiClawBook";
 import SparkCommerceBelt from "./SparkCommerceBelt";
@@ -2950,31 +2951,57 @@ function Capabilities() {
 }
 
 function Contact() {
+  const [copyStatus, setCopyStatus] = useState<"idle" | "copied" | "failed">("idle");
+  const [catOpen, setCatOpen] = useState(false);
+  const resetTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => () => {
+    if (resetTimer.current) clearTimeout(resetTimer.current);
+  }, []);
+
+  const copyEmail = async () => {
+    try {
+      await navigator.clipboard.writeText("2284664203@qq.com");
+      setCopyStatus("copied");
+    } catch {
+      setCopyStatus("failed");
+    }
+    if (resetTimer.current) clearTimeout(resetTimer.current);
+    resetTimer.current = setTimeout(() => setCopyStatus("idle"), 3000);
+  };
+
   return (
     <SceneSection className="contact contact--cat" id="contact" index={SCENE_CONTACT_INDEX} label="联系" scene="contact">
-      <div className="contact-cat">
-        <Reveal className="contact-cat__status-wrap">
-          <span className="contact-cat__status"><i />正在接：全职 / 项目合作 / 技术交流</span>
-        </Reveal>
+      <div className="contact-close">
+        <div className="contact-close__main">
+          <Reveal className="contact-close__title">
+            <h2 aria-label="聊聊吧。"><span className="contact-close__char" aria-hidden="true" style={{"--char-index": 0} as React.CSSProperties}>聊</span><span className="contact-close__char" aria-hidden="true" style={{"--char-index": 1} as React.CSSProperties}>聊</span><span className="contact-close__char" aria-hidden="true" style={{"--char-index": 2} as React.CSSProperties}>吧</span><span className="contact-close__dot" aria-hidden="true">.</span></h2>
+          </Reveal>
+          <Reveal className="contact-close__intro" delay={0.12}>
+            <p>工作机会 <span>·</span> 项目合作 <span>·</span> 技术交流</p>
+          </Reveal>
+          <Reveal className="contact-close__actions" delay={0.24}>
+            <div className="contact-close__email-row">
+              <a className="contact-close__email" href="mailto:2284664203@qq.com">
+                <span className="contact-close__envelope" aria-hidden="true"><span className="contact-close__letter"/><span className="contact-close__envelope-body"/><span className="contact-close__flap"/></span>
+                <span>2284664203@qq.com</span><i aria-hidden="true">↗</i>
+              </a>
+              <button className="contact-close__copy" type="button" onClick={copyEmail} aria-label="复制邮箱地址" data-state={copyStatus}>
+                <span className="contact-close__copy-icon" aria-hidden="true"><i/><i/><b>✓</b></span><span>复制</span>
+              </button>
+            </div>
+            <div className="contact-close__status" aria-live="polite" role="status">
+              {copyStatus === "copied" ? "邮箱已复制" : copyStatus === "failed" ? "复制失败，请手动选择邮箱地址" : ""}
+            </div>
+            <a className="contact-close__github" href="https://github.com/xuanyu6868" target="_blank" rel="noreferrer"><svg className="contact-close__github-mark" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path fill="currentColor" d="M12 .297a12 12 0 0 0-3.794 23.386c.6.11.82-.26.82-.577v-2.233c-3.338.726-4.042-1.61-4.042-1.61-.546-1.387-1.333-1.756-1.333-1.756-1.09-.744.082-.729.082-.729 1.205.085 1.84 1.237 1.84 1.237 1.07 1.834 2.807 1.304 3.492.997.108-.776.418-1.305.762-1.605-2.665-.304-5.466-1.333-5.466-5.931 0-1.31.469-2.381 1.236-3.221-.124-.304-.535-1.524.117-3.176 0 0 1.008-.322 3.3 1.23a11.51 11.51 0 0 1 3.003-.404c1.018.005 2.045.137 3.003.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.652.242 2.872.119 3.176.77.84 1.235 1.911 1.235 3.221 0 4.61-2.805 5.624-5.475 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.216.694.825.576A12 12 0 0 0 12 .297Z"/></svg>GitHub <span aria-hidden="true">↗</span></a>
+          </Reveal>
+        </div>
 
-        <Reveal className="contact-cat__title" delay={0.06}>
-          <h2 aria-hidden="true">聊聊吧</h2>
-        </Reveal>
-
-        <Reveal className="contact-cat__cta" delay={0.12}>
-          <a className="contact-cat__email" href="mailto:2284664203@qq.com">
-            2284664203@qq.com <i>↗</i>
-          </a>
-          <div className="contact-cat__links">
-            <a href="https://github.com/xuanyu6868" target="_blank" rel="noreferrer">GitHub ↗</a>
-            <a href="#top">回到顶部 ↑</a>
-          </div>
-        </Reveal>
-
-        <footer className="contact-cat__footer">
+        <footer className="contact-close__footer">
           <span>禤宇 © 2026</span>
           <span>AI Native 全栈工程师</span>
-          <span>设计 + 代码：禤宇 · 监工：猫</span>
+          <span>设计 + 代码：禤宇 · 监工：猫<button className="contact-cat-peek" type="button" data-open={catOpen} aria-pressed={catOpen} aria-label={catOpen ? "让小猫躲起来" : "让小猫探头"} onClick={() => setCatOpen(!catOpen)}><svg viewBox="0 0 48 38" aria-hidden="true"><path className="contact-cat-peek__face" d="M7 29V13L11 4l9 6c3-1 6-1 9 0l9-6 3 10v15c0 7-7 9-17 9S7 36 7 29Z"/><path className="contact-cat-peek__eyes" d="M16 23h.1M32 23h.1"/><path className="contact-cat-peek__detail" d="M22 28l2 2 2-2M10 28l-6-1m7 4-6 2m32-5 6-1m-7 4 6 2"/></svg></button></span>
+          <a href="#top" className="contact-close__back">回到顶部 <span aria-hidden="true">↑</span></a>
         </footer>
       </div>
     </SceneSection>
