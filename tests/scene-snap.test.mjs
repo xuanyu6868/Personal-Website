@@ -50,13 +50,13 @@ test("a gentle gesture moves exactly one scene and suppresses its momentum", () 
   const h = createHarness();
   assert.equal(h.listeners.get("wheel").options.passive, false);
   assert.equal(h.wheel({ deltaY: 8 }), true); h.advance(70); h.render(60);
-  assert.equal(h.wheel({ deltaY: 5 }), true); h.render(600);
+  assert.equal(h.wheel({ deltaY: 5 }), true); h.render(1200);
   assert.equal(h.win.scrollY, 1000); assert.equal(h.frames.size, 0); h.stop();
 });
 
 test("a mouse wheel notch goes to the adjacent scene", () => {
   for (const event of [{ deltaY: 100, deltaMode: 0 }, { deltaY: 3, deltaMode: 1 }]) {
-    const h = createHarness(); assert.equal(h.wheel(event), true); h.advance(70); h.render(600);
+    const h = createHarness(); assert.equal(h.wheel(event), true); h.advance(70); h.render(1200);
     assert.equal(h.win.scrollY, 1000); h.stop();
   }
 });
@@ -64,28 +64,28 @@ test("a mouse wheel notch goes to the adjacent scene", () => {
 test("a small fractional trackpad gesture still advances one scene", () => {
   const h = createHarness();
   assert.equal(h.wheel({ deltaY: 0.5 }), true);
-  h.advance(70); h.render(600);
+  h.advance(70); h.render(1200);
   assert.equal(h.win.scrollY, 1000);
   h.stop();
 });
 
 test("a fast gesture remains free and settles to the nearest scene even from the middle", () => {
-  const h = createHarness(); assert.equal(h.wheel({ deltaY: 80 }), false);
+  const h = createHarness(); assert.equal(h.wheel({ deltaY: 125 }), false);
   h.scrollTo(1550); h.advance(219); assert.equal(h.frames.size, 0);
   h.advance(1); h.render(600); assert.equal(h.win.scrollY, 2000); h.stop();
 });
 
 test("acceleration during classification releases the earlier deltas to native scrolling", () => {
-  const h = createHarness(); assert.equal(h.wheel({ deltaY: 30 }), true); h.advance(20);
-  assert.equal(h.wheel({ deltaY: 40 }), true); h.advance(20);
-  assert.equal(h.wheel({ deltaY: 50 }), false); assert.equal(h.win.scrollY, 120);
+  const h = createHarness(); assert.equal(h.wheel({ deltaY: 50 }), true); h.advance(20);
+  assert.equal(h.wheel({ deltaY: 60 }), true); h.advance(20);
+  assert.equal(h.wheel({ deltaY: 80 }), false); assert.equal(h.win.scrollY, 190);
   h.scrollTo(1430); h.advance(220); h.render(600); assert.equal(h.win.scrollY, 1000); h.stop();
 });
 
 test("a fast continuation can interrupt a light scene transition", () => {
   const h = createHarness(); h.wheel({ deltaY: 8 }); h.advance(70); h.render(60);
   assert.equal(h.frames.size, 1); const before = h.win.scrollY;
-  assert.equal(h.wheel({ deltaY: 80 }), false); assert.equal(h.frames.size, 0);
+  assert.equal(h.wheel({ deltaY: 125 }), false); assert.equal(h.frames.size, 0);
   assert.ok(h.win.scrollY > before); h.scrollTo(1600); h.advance(220); h.render(600);
   assert.equal(h.win.scrollY, 2000); h.stop();
 });
@@ -93,14 +93,22 @@ test("a fast continuation can interrupt a light scene transition", () => {
 test("opposite direction interrupts a light transition immediately", () => {
   const h = createHarness(); h.wheel({ deltaY: 8 }); h.advance(70); h.render(90);
   assert.ok(h.win.scrollY > 3); assert.equal(h.wheel({ deltaY: -8 }), true);
-  assert.equal(h.frames.size, 0); h.advance(70); h.render(600);
+  assert.equal(h.frames.size, 0); h.advance(70); h.render(1200);
   assert.equal(h.win.scrollY, 0); h.stop();
 });
 
-test("a separate same-direction mouse notch can advance again without a fixed cooldown", () => {
+test("rapid repeated mouse notches release the scene limit", () => {
   const h = createHarness(); h.wheel({ deltaY: 100 }); h.advance(70); h.render(40);
-  h.advance(70); assert.equal(h.wheel({ deltaY: 100 }), true); h.advance(70); h.render(700);
+  assert.equal(h.wheel({ deltaY: 100 }), false);
+  assert.equal(h.frames.size, 0); h.scrollTo(1600); h.advance(220); h.render(850);
   assert.equal(h.win.scrollY, 2000); h.stop();
+});
+
+test("gentle scene motion starts softly and arrives in about a second", () => {
+  const h = createHarness(); h.wheel({ deltaY: 8 }); h.advance(70);
+  h.render(100); assert.ok(h.win.scrollY < 50);
+  h.render(370); assert.ok(h.win.scrollY > 450 && h.win.scrollY < 550);
+  h.render(470); assert.equal(h.win.scrollY, 1000); h.stop();
 });
 
 test("nested scrollers, dialogs and horizontal gestures remain native", () => {
@@ -112,7 +120,7 @@ test("nested scrollers, dialogs and horizontal gestures remain native", () => {
 });
 
 test("uses current scene positions after asynchronous layout changes", () => {
-  const h = createHarness(); h.wheel({ deltaY: 80 }); h.scrollTo(1500); h.setAnchors([0, 1100, 2050]);
+  const h = createHarness(); h.wheel({ deltaY: 125 }); h.scrollTo(1500); h.setAnchors([0, 1100, 2050]);
   h.advance(220); h.render(600); assert.equal(h.win.scrollY, 1100); h.stop();
 });
 

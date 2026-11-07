@@ -5,13 +5,15 @@ export function installSceneScrollController(win: Window & typeof globalThis = w
   const CLASSIFY_DELAY = 70;
   const GESTURE_GAP = 150;
   const SETTLE_DELAY = 220;
-  const FAST_SAMPLE_WINDOW = 90;
-  const FAST_SINGLE_DELTA = 72;
-  const FAST_BURST_DELTA = 110;
+  const FAST_SAMPLE_WINDOW = 110;
+  const FAST_SINGLE_DELTA = 110;
+  const FAST_BURST_DELTA = 180;
+  const FAST_NOTCH_GAP = 190;
   type Mode = "idle" | "pending" | "light" | "free";
   let mode: Mode = "idle";
   let direction = 0;
   let lastWheelAt = -Infinity;
+  let lastWasNotch = false;
   let samples: { time: number; magnitude: number }[] = [];
   let bufferedDelta = 0;
   let classificationTimer: number | null = null;
@@ -38,6 +40,7 @@ export function installSceneScrollController(win: Window & typeof globalThis = w
     samples = [];
     bufferedDelta = 0;
     lastWheelAt = -Infinity;
+    lastWasNotch = false;
   };
   const isNestedScroll = (event: WheelEvent) => event.composedPath().some((node) => {
     if (!(node instanceof win.HTMLElement) || node === doc.body || node === doc.documentElement) return false;
@@ -52,17 +55,21 @@ export function installSceneScrollController(win: Window & typeof globalThis = w
     const maxScroll = Math.max(0, doc.documentElement.scrollHeight - win.innerHeight);
     return { anchors, maxScroll };
   };
-  const animateTo = (target: number) => {
+  const animateTo = (target: number, kind: "light" | "settle") => {
     cancelAnimation();
     const start = win.scrollY;
     const distance = target - start;
     if (Math.abs(distance) <= 3) return;
-    const duration = Math.min(600, Math.max(280, 300 + Math.abs(distance) / win.innerHeight * 180));
+    // Start gently, build momentum, then ease into the scene. Alignment after
+    // free scrolling is slightly quicker so it doesn't feel like another gesture.
+    const duration = kind === "light"
+      ? Math.min(1200, Math.max(700, 660 + Math.abs(distance) / win.innerHeight * 280))
+      : Math.min(850, Math.max(380, 380 + Math.abs(distance) / win.innerHeight * 300));
     const started = win.performance.now();
     activeTarget = target;
     const step = (now: number) => {
       const progress = Math.min(1, (now - started) / duration);
-      const eased = 1 - Math.pow(1 - progress, 3);
+      const eased = progress * progress * (3 - 2 * progress);
       win.scrollTo({ top: start + distance * eased, behavior: "instant" });
       if (progress < 1) animationFrame = win.requestAnimationFrame(step);
       else { animationFrame = null; activeTarget = null; }
@@ -75,7 +82,7 @@ export function installSceneScrollController(win: Window & typeof globalThis = w
     mode = "idle";
     const { anchors, maxScroll } = scenePositions();
     const target = nearestSceneTarget(win.scrollY, anchors, maxScroll);
-    if (target !== null) animateTo(target);
+    if (target !== null) animateTo(target, "settle");
   };
   const scheduleSettle = () => {
     if (settleTimer !== null) win.clearTimeout(settleTimer);
@@ -96,7 +103,7 @@ export function installSceneScrollController(win: Window & typeof globalThis = w
     bufferedDelta = 0;
     const { anchors, maxScroll } = scenePositions();
     const target = adjacentSceneTarget(origin ?? win.scrollY, anchors, direction, maxScroll);
-    if (target !== null) animateTo(target);
+    if (target !== null) animateTo(target, "light");
   };
   const wheelPixels = (event: WheelEvent) => event.deltaY * (event.deltaMode === 1 ? 16 : event.deltaMode === 2 ? win.innerHeight : 1);
   const onWheel = (event: WheelEvent) => {
@@ -112,15 +119,18 @@ export function installSceneScrollController(win: Window & typeof globalThis = w
     // Common physical wheel notches can be reported as either lines or pixels.
     const notch = (event.deltaMode === 1 && Math.abs(event.deltaY) <= 3)
       || (event.deltaMode === 0 && (Math.abs(event.deltaY) === 100 || Math.abs(event.deltaY) === 120));
+    const rapidNotch = notch && lastWasNotch && nextDirection === direction
+      && now - lastWheelAt <= FAST_NOTCH_GAP;
     const newGesture = now - lastWheelAt > GESTURE_GAP || (notch && now - lastWheelAt >= FAST_SAMPLE_WINDOW);
     const priorTarget = mode === "light" && newGesture && nextDirection === direction ? activeTarget : null;
     if (mode !== "idle" && mode !== "free" && (newGesture || nextDirection !== direction)) reset();
     if (mode === "idle" && animationFrame !== null) cancelAnimation();
     lastWheelAt = now;
+    lastWasNotch = notch;
     direction = nextDirection;
     samples = samples.filter((sample) => now - sample.time <= FAST_SAMPLE_WINDOW);
     samples.push({ time: now, magnitude });
-    const fast = (!notch && magnitude >= FAST_SINGLE_DELTA)
+    const fast = rapidNotch || (!notch && magnitude >= FAST_SINGLE_DELTA)
       || (samples.length > 1 && samples.reduce((sum, sample) => sum + sample.magnitude, 0) >= FAST_BURST_DELTA);
 
     if (mode === "free") { scheduleSettle(); return; }
