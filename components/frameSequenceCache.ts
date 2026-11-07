@@ -31,6 +31,8 @@ export class FrameSequenceCache {
   private desired = new Set<number>();
   private queue: number[] = [];
   private warmPromise: Promise<void> | null = null;
+  private warmGeneration = 0;
+  private targetKey: string | null = null;
   private destroyed = false;
 
   constructor({
@@ -109,9 +111,10 @@ export class FrameSequenceCache {
     if (this.destroyed) return Promise.resolve();
     if (this.warmPromise) return this.warmPromise;
 
+    const generation = this.warmGeneration;
     let next = 0;
     const worker = async () => {
-      while (!this.destroyed && next < this.count) {
+      while (!this.destroyed && generation === this.warmGeneration && next < this.count) {
         const index = next++;
         try {
           await this.ensureBlob(index);
@@ -120,8 +123,16 @@ export class FrameSequenceCache {
         }
       }
     };
-    this.warmPromise = Promise.all([worker(), worker()]).then(() => undefined);
-    return this.warmPromise;
+    const promise = Promise.all([worker(), worker()]).then(() => undefined).finally(() => {
+      if (this.warmPromise === promise) this.warmPromise = null;
+    });
+    this.warmPromise = promise;
+    return promise;
+  }
+
+  pausePrefetch() {
+    this.warmGeneration += 1;
+    this.warmPromise = null;
   }
 
   setTarget(index: number, direction: 1 | -1 = 1, limit = this.hotLimit) {
@@ -129,6 +140,9 @@ export class FrameSequenceCache {
 
     const center = this.normalize(index);
     const windowSize = Math.max(1, Math.min(this.hotLimit, Math.round(limit)));
+    const targetKey = `${center}:${direction}:${windowSize}`;
+    if (this.targetKey === targetKey) return;
+    this.targetKey = targetKey;
     const forwardSlots = Math.ceil((windowSize - 1) * 0.75);
     const backwardSlots = windowSize - 1 - forwardSlots;
     const ordered: number[] = [];
@@ -214,6 +228,7 @@ export class FrameSequenceCache {
   }
 
   clearDecoded() {
+    this.targetKey = null;
     this.desired.clear();
     this.queue = [];
     for (const timer of this.retryTimers.values()) clearTimeout(timer);
@@ -225,6 +240,7 @@ export class FrameSequenceCache {
 
   destroy() {
     this.destroyed = true;
+    this.pausePrefetch();
     this.clearDecoded();
     this.blobs.clear();
   }

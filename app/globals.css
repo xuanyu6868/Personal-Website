@@ -1074,9 +1074,9 @@ a:focus-visible { outline: 1px solid var(--accent); outline-offset: 5px; }
 /* ---------------- 能力 ---------------- */
 .caps-cat {
   position: relative;
-  min-height: 320vh; /* 钉住轨道：100vh 展示位 + 约 2 屏的入场动画滚动距离 */
+  min-height: 100vh;
 }
-/* 钉住层：absolute 子元素的包含块是它的 padding box，布局与原单屏一致 */
+/* 模型入场按时间播放，不再需要额外的滚动轨道。 */
 .caps-cat__pin {
   position: sticky; top: 0; box-sizing: border-box;
   height: 100vh;

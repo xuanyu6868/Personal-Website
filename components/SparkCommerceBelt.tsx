@@ -62,6 +62,12 @@ export default function SparkCommerceBelt() {
 
     const offsets = Array(LANE_COUNT).fill(0);
     const hoverScale = Array(LANE_COUNT).fill(1);
+    const setWidths = Array(LANE_COUNT).fill(0);
+    const measureWidths = () => {
+      tracks.forEach((track, lane) => { setWidths[lane] = track.scrollWidth / TILE_SETS; });
+    };
+    const resizeObserver = new ResizeObserver(measureWidths);
+    tracks.forEach((track) => resizeObserver.observe(track));
     let boost = 0;
     let raf = 0;
     let last = performance.now();
@@ -90,7 +96,7 @@ export default function SparkCommerceBelt() {
       if (Math.abs(boost) < 0.5) boost = 0;
 
       tracks.forEach((track, lane) => {
-        const setWidth = track.scrollWidth / TILE_SETS;
+        const setWidth = setWidths[lane];
         if (setWidth <= 0) return;
         offsets[lane] -= (BASE_SPEEDS[lane] * DIRECTIONS[lane] * hoverScale[lane] + boost) * dt;
         const wrapped = ((offsets[lane] % setWidth) + setWidth) % setWidth;
@@ -103,6 +109,7 @@ export default function SparkCommerceBelt() {
 
     const start = () => {
       if (running) return;
+      measureWidths();
       running = true;
       last = performance.now();
       window.addEventListener("wheel", onWheel, { passive: true });
@@ -122,6 +129,7 @@ export default function SparkCommerceBelt() {
 
     return () => {
       observer.disconnect();
+      resizeObserver.disconnect();
       stop();
       hoverCleanups.forEach((cleanup) => cleanup());
     };
