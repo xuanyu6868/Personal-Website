@@ -25,3 +25,10 @@ export function nearestSceneTarget(current: number, anchors: readonly number[], 
 export function preferSharpFrame(target: number, nearest: number | null, fast: boolean): boolean {
   return nearest !== null && (!fast || Math.abs(nearest - target) <= 3);
 }
+
+/** Keep the original background frames after shortening a former sticky track. */
+export function backgroundProgress(scroll: number, range: number, start: number, end: number, removed: number): number {
+  const extra = Math.max(0, removed);
+  const within = end > start ? Math.max(0, Math.min(1, (scroll - start) / (end - start))) : 0;
+  return Math.max(0, Math.min(1, (scroll + extra * within) / Math.max(1, range + extra)));
+}

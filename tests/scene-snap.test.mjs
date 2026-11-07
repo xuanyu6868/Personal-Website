@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { adjacentSceneTarget, nearestSceneTarget, preferSharpFrame } from "../lib/scroll-behavior.ts";
+import { adjacentSceneTarget, nearestSceneTarget, preferSharpFrame, backgroundProgress } from "../lib/scroll-behavior.ts";
 import { installSceneScrollController } from "../lib/scene-scroll-controller.ts";
 
 function createHarness() {
@@ -46,12 +46,29 @@ test("finds adjacent scenes in the intended direction and clamps page edges", ()
   assert.equal(adjacentSceneTarget(3000, [0, 1000, 4000], 1, 3000), null);
 });
 
+test("shortened capability track preserves background frames at scene anchors", () => {
+  const range = 9000, start = 8000, end = 9000, removed = 2200;
+  assert.equal(backgroundProgress(4000, range, start, end, removed), 4000 / 11200);
+  assert.equal(backgroundProgress(start, range, start, end, removed), 8000 / 11200);
+  assert.equal(backgroundProgress(8500, range, start, end, removed), 9600 / 11200);
+  assert.equal(backgroundProgress(end, range, start, end, removed), 1);
+  assert.equal(backgroundProgress(4500, range, 0, 0, 0), .5);
+});
+
 test("a gentle gesture moves exactly one scene and suppresses its momentum", () => {
   const h = createHarness();
   assert.equal(h.listeners.get("wheel").options.passive, false);
   assert.equal(h.wheel({ deltaY: 8 }), true); h.advance(70); h.render(60);
   assert.equal(h.wheel({ deltaY: 5 }), true); h.render(1200);
   assert.equal(h.win.scrollY, 1000); assert.equal(h.frames.size, 0); h.stop();
+});
+
+test("one gentle gesture crosses between the last two scene anchors in either direction", () => {
+  const h = createHarness(); h.setAnchors([0, 1000, 1900, 3000]);
+  h.scrollTo(3000); h.wheel({ deltaY: -8 }); h.advance(70); h.render(1200);
+  assert.equal(h.win.scrollY, 1900);
+  h.advance(200); h.wheel({ deltaY: 8 }); h.advance(70); h.render(1200);
+  assert.equal(h.win.scrollY, 3000); h.stop();
 });
 
 test("a mouse wheel notch goes to the adjacent scene", () => {

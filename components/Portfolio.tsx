@@ -19,7 +19,7 @@ import VoiceProject from "./VoiceProject";
 import WeiClawBook from "./weiclaw-preview/WeiClawBook";
 import SparkCommerceBelt from "./SparkCommerceBelt";
 import { FrameSequenceCache } from "./frameSequenceCache";
-import { preferSharpFrame } from "../lib/scroll-behavior";
+import { backgroundProgress, preferSharpFrame } from "../lib/scroll-behavior";
 import { installSceneScrollController } from "../lib/scene-scroll-controller";
 
 const EASE = [0.22, 1, 0.36, 1] as const;
@@ -520,6 +520,22 @@ function ScrollFrameSequence() {
       }
     }
 
+    let legacyTrack = { start: 0, end: 0, removed: 0 };
+    const measureLegacyTrack = () => {
+      const section = document.getElementById("capabilities");
+      const track = section?.querySelector<HTMLElement>(".caps-cat");
+      const contact = document.getElementById("contact");
+      if (!section || !track || !contact || window.innerWidth <= 820 || track.classList.contains("caps-cat--flat")) {
+        legacyTrack = { start: 0, end: 0, removed: 0 };
+        return;
+      }
+      legacyTrack = {
+        start: section.getBoundingClientRect().top + window.scrollY,
+        end: contact.getBoundingClientRect().top + window.scrollY,
+        removed: Math.max(0, window.innerHeight * 3.2 - track.offsetHeight),
+      };
+    };
+
     const updateFrame = () => {
       const scrollRange = Math.max(
         1,
@@ -533,7 +549,7 @@ function ScrollFrameSequence() {
       scrollVelocity = scrollDelta === 0
         ? scrollVelocity * 0.85
         : scrollVelocity * 0.55 + instantVelocity * 0.45;
-      const progress = Math.min(1, Math.max(0, window.scrollY / scrollRange));
+      const progress = backgroundProgress(window.scrollY, scrollRange, legacyTrack.start, legacyTrack.end, legacyTrack.removed);
       desiredFrameRef.current = Math.round(progress * (FRAME_COUNT - 1));
       if (scrollDelta !== 0) {
         direction = scrollDelta > 0 ? 1 : -1;
@@ -547,6 +563,7 @@ function ScrollFrameSequence() {
     };
 
     const onResize = () => {
+      measureLegacyTrack();
       drawFrame(paintedFrame);
       updateFrame();
     };
@@ -579,6 +596,10 @@ function ScrollFrameSequence() {
       scheduleDraw();
     };
 
+    measureLegacyTrack();
+    const layoutObserver = new ResizeObserver(() => { measureLegacyTrack(); updateFrame(); });
+    const site = document.querySelector(".site");
+    if (site) layoutObserver.observe(site);
     scheduleHotWindow(desiredFrameRef.current);
     updateFrame();
     window.addEventListener("scroll", updateFrame, { passive: true });
@@ -589,6 +610,7 @@ function ScrollFrameSequence() {
       window.removeEventListener("scroll", updateFrame);
       window.removeEventListener("resize", onResize);
       document.removeEventListener("visibilitychange", onVisibilityChange);
+      layoutObserver.disconnect();
       destroyed = true;
       if (frameRef.current !== null) window.cancelAnimationFrame(frameRef.current);
       for (const timer of retryTimers) window.clearTimeout(timer);
@@ -2957,7 +2979,7 @@ function Capabilities() {
   const reduceMotion = useReducedMotion();
   // SU7 S 形甩尾由远及近开向画面中心，到位后无缝切到配套转盘自动旋转。
   // 播放由 IntersectionObserver 触发：每次滚入该页（从上或从下）都从头自动播放，
-  // 与滚动进度解耦；外层 320vh sticky 钉住给足观看时间。
+  // 与滚动进度解耦，能力页只占一个场景高度。
   // 文字内容收纳进左侧的分枝目录（技术 / 能力两组，各带 6 个子项）。
 
   return (
