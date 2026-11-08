@@ -35,14 +35,8 @@ a:focus-visible { outline: 1px solid var(--accent); outline-offset: 5px; }
 .scene[data-near="true"]:not(.scene--hero) > .scene__content { opacity: 1; transform: none; }
 .reveal { opacity: 0; transform: translateY(40px); transition: opacity 1s var(--ease-out), transform 1s var(--ease-out); }
 .reveal.is-visible { opacity: 1; transform: none; }
-.scene__backdrop { position: absolute; z-index: -1; inset: 0; pointer-events: none; opacity: .36; transform: scale(.985); transform-origin: center; background: linear-gradient(180deg, rgba(255,255,255,.018), transparent 30%, rgba(0,0,0,.08)); transition: opacity 900ms ease, transform 1200ms var(--ease-out), background 900ms ease; }
-.scene__backdrop::before { content: ""; position: absolute; inset: 0 var(--page-padding); border-top: 1px solid rgba(255,255,255,.075); border-bottom: 1px solid rgba(255,255,255,.035); opacity: .7; }
-.scene[data-active="true"] .scene__backdrop { opacity: .92; transform: scale(1); }
-.scene--hero .scene__backdrop { opacity: .72; background: radial-gradient(circle at 76% 48%, rgba(53,185,247,.06), transparent 24%), linear-gradient(180deg, rgba(255,255,255,.025), transparent 38%, rgba(0,0,0,.12)); }
-.scene--profile .scene__backdrop { background: radial-gradient(circle at 18% 54%, rgba(255,77,46,.075), transparent 25%), linear-gradient(180deg, rgba(255,255,255,.018), transparent 30%, rgba(0,0,0,.12)); }
-.scene--work .scene__backdrop { background: radial-gradient(circle at 82% 32%, rgba(53,185,247,.045), transparent 22%), linear-gradient(180deg, rgba(255,255,255,.012), transparent 32%, rgba(0,0,0,.14)); }
-.scene--capabilities .scene__backdrop { background: radial-gradient(circle at 26% 46%, rgba(255,77,46,.055), transparent 24%), linear-gradient(180deg, rgba(255,255,255,.018), transparent 30%, rgba(0,0,0,.1)); }
-.scene--contact .scene__backdrop { background: radial-gradient(circle at 78% 68%, rgba(255,77,46,.1), transparent 27%), linear-gradient(180deg, rgba(255,255,255,.012), transparent 26%, rgba(0,0,0,.18)); }
+/* Shared video remains visible without per-scene rectangular overlays. */
+.scene__backdrop { display: none; }
 
 .scroll-video { --video-progress:0%; position:fixed; inset:0; z-index:-3; overflow:hidden; pointer-events:none; background:#070707 url('/video/background-poster.jpg') center/cover no-repeat; }
 .scroll-video__media { position:absolute; inset:0; width:100%; height:100%; object-fit:cover; opacity:0; filter:saturate(.9) brightness(.9) contrast(1.06); transform:scale(1.01); transition:opacity 1.2s ease; }
@@ -138,7 +132,6 @@ a:focus-visible { outline: 1px solid var(--accent); outline-offset: 5px; }
 .project--reverse .project__media { order:2; }
 .project--reverse .project__info { order:1; }
 .note-sync-scene { justify-content:flex-start; padding-inline:clamp(32px,2.7vw,44px); }
-.note-sync-scene::before { content:""; position:absolute; z-index:0; inset:0; pointer-events:none; background:rgba(0,0,0,.16); }
 .note-sync-scene > .scene__content { display:flex; flex:1 1 auto; min-height:0; flex-direction:column; }
 .note-sync-scene .section-header { margin-bottom:clamp(12px,1.8vh,20px); }
 .note-sync-gallery { display:flex; flex:1 1 auto; min-height:0; flex-direction:column; gap:clamp(8px,1.4vh,16px); padding-bottom:clamp(2px,1vh,10px); }
@@ -889,7 +882,6 @@ a:focus-visible { outline: 1px solid var(--accent); outline-offset: 5px; }
 
 /* SparkCommerce AI:三条斜向传送带场景 */
 .spark-belt-scene { justify-content:flex-start; }
-.spark-belt-scene::before { content:""; position:absolute; z-index:0; inset:0; pointer-events:none; background:rgba(0,0,0,.16); }
 .spark-belt-scene > .scene__content { display:flex; flex:1 1 auto; min-height:0; flex-direction:column; }
 .spark-belt-scene .section-header { margin-bottom:clamp(14px,2vh,22px); }
 
